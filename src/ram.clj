@@ -30,9 +30,9 @@
   (>!! a-wire 0))
 
 (defn not-gate
-  ([a-wire] (not-gate (chan) a-wire))
-  ([out a-wire]
-   (let [mult-wire (mult a-wire)
+  ([a] (not-gate (chan) a))
+  ([out a]
+   (let [mult-wire (mult a)
          left-wire (chan)
          right-wire (chan)]
      (tap mult-wire left-wire)
@@ -61,7 +61,28 @@
   (>!! b-wire 1)
   (>!! a-wire 0))
 
+
 (defn memory-bit
+  "
+                           a                              +------------+
+        +----------+    +---------------------------------+            |         o
+ i +----+          |    |                                 |            +----+-----+
+        |          +----+                            +----+            |    |
+        |          |    |                            |    +------------+    |
+   +----+          |    |                            |                      |
+   |    +----------+    |                            +-------------------------+
+   |                    |                                                   |  |
+   |                    |                              +--------------------+  |
+   |                    |                              |                       |
+   |                    |   +------------+             | +-------------+       |
+   |                    +---+            |             | |             |       |
+   |                        |            | b           +-+             +-------+
+   |                        |            +----+          |             |  c
++--+------------------------+            |    +----------+             |
+ s                          +------------+               |             |
+                                                         +-------------+
+
+  "
   ([i s] (memory-bit (chan) i s))
   ([o i s]
    (let [a (nand-gate i s)
@@ -76,9 +97,10 @@
   (go-loop []
     (println :o> (<! o))
     (recur))
+  ; set  i to 1
   (>!! i 1)
+  ; => 0 b/c s is not 1 yet
   (>!! s 1)
+  ; => 1 b/c s enabled
   (>!! s 0)
-  (>!! i 0)
-  (>!! s 1)
-  (>!! i 0))
+  ; => o should freeze to 1...but noo!)
