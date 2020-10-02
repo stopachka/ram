@@ -91,12 +91,25 @@
      (nand-gate o a c))))
 
 (comment
-  (def i (chan))
-  (def s (chan))
-  (def o (memory-bit i s))
-  (go-loop []
-    (println :o> (<! o))
-    (recur))
+  (do
+    (def i (chan))
+    (def s (chan))
+    (def o (chan))
+    (def a (nand-gate i s))
+    (def b (nand-gate a s))
+    (def c (nand-gate o b))
+    (nand-gate o a c)
+    (let [chs [i s o a b c]
+          copies (mapv (fn [c] (tap (mult c) (chan))) chs)
+          ch->idx (->> copies
+                       (map-indexed vector)
+                       (map (comp vec reverse))
+                       (into {}))
+          idx->name {0 'i 1 's 2 'o 3 'a 4 'b 5 'c}]
+      (go-loop []
+        (let [[v ch] (alts! copies)]
+          (println (idx->name (ch->idx ch)) v))
+        (recur))))
   ; set  i to 1
   (>!! i 1)
   ; => 0 b/c s is not 1 yet
