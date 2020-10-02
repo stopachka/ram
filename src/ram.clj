@@ -43,4 +43,18 @@
   (go-loop []
     (println :not>  (<! not-wire))
     (recur))
-  (>!! a-wire 1))
+  (>!! a-wire 1)
+  (>!! a-wire 0))
+
+(def and-gate (comp not-gate nand-gate))
+
+(comment
+  (def a-wire (chan))
+  (def b-wire (chan))
+  (def and-wire (and-gate a-wire b-wire))
+  (go-loop []
+    (println :and> (<! and-wire))
+    (recur))
+  (>!! a-wire 1)
+  (>!! b-wire 1)
+  (>!! a-wire 0))
