@@ -103,4 +103,5 @@
   (>!! s 1)
   ; => 1 b/c s enabled
   (>!! s 0)
-  ; => o should freeze to 1...but noo!)
+  ; => o should freeze to 1...but noo!
+  )
