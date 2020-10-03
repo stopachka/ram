@@ -45,17 +45,19 @@
 (declare trigger)
 
 (defn trigger-machine [state m]
-  (trigger state (:out m)
-           (apply (:f m)
-                  (map (:charge-map state)
-                       (:in m)))))
+  (let [wire (:out m)
+        f (:f m)
+        curr-v (get-in state [:charge-map wire])
+        new-v (apply f (map (:charge-map state)
+                            (:in m)))]
+    (if (= curr-v new-v)
+      state
+      (trigger state wire new-v))))
 
 (defn trigger [state wire new-v]
   (let [state' (assoc-in state [:charge-map wire] new-v)
         machines (dependent-machines state wire)]
-    (if (= state state')
-      state
-      (reduce (fn [s m] (trigger-machine s m)) state' machines))))
+    (reduce (fn [s m] (trigger-machine s m)) state' machines)))
 
 (comment
   (def s (wire-nand-gate {} :a :b :o))
@@ -121,7 +123,9 @@
 
 (comment
   (def s (wire-memory-bit empty-state :i :s :o))
-  (trigger s :i 1)
-  (trigger s :s 1)
-  (trigger s :i 1)
-  s)
+  (def s' (trigger s :i 1))
+  s'
+  (def s'' (trigger s' :s 1))
+  s''
+  (def s''' (trigger (trigger s'' :s 0) :i 0))
+  s''')
