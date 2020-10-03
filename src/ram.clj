@@ -10,7 +10,7 @@
 
 (defn wire [s] (uniq-name s))
 
-;; wire up a nand gate
+;; nand gate
 
 (defn add-machine [s m] (update s :machines conj m))
 
@@ -62,6 +62,8 @@
   (def s'' (trigger s' :b 1))
   s'')
 
+;; not-gate
+
 (defn wire-not-gate
   ([state a o]
    (wire-nand-gate state a a o)))
@@ -86,6 +88,8 @@
   (def s'' (trigger s' :b 1))
   s'')
 
+;; memory-bit
+
 (defn wire-memory-bit
   "
                            a                              +------------+
@@ -107,7 +111,7 @@
                                                          +-------------+
 
   "
-  ([state i s o]
+  ([state s i o]
    (let [a (wire :mem-a)
          b (wire :mem-b)
          c (wire :mem-c)]
@@ -118,10 +122,48 @@
          (wire-nand-gate b o c)))))
 
 (comment
-  (def s (wire-memory-bit empty-state :i :s :o))
+  (def s (wire-memory-bit empty-state :s :i :o))
   (def s' (trigger s :i 1))
   s'
   (def s'' (trigger s' :s 1))
   s''
   (def s''' (trigger (trigger s'' :s 0) :i 0))
   s''')
+
+;; byte
+
+(defn wire-byte [state s in-and-out-wires]
+  (reduce (fn [acc-state [i o]]
+            (wire-memory-bit acc-state s i o))
+          state
+          in-and-out-wires))
+
+;; hmmm something is wacky here : \
+(comment
+  (do
+    (def is [:i1 :i2 :i3 :i4 :i5 :i6 :i7 :i8])
+    (def os [:o1 :o2 :o3 :o4 :o5 :o6 :o7 :o8])
+    (def i+o (map vector is os))
+    (def s
+      (wire-byte
+        empty-state
+        :s
+        i+o))
+    (def s' (->
+              s
+              (trigger :i1 1)
+              (trigger :i2 1)
+              (trigger :i5 1)
+              (trigger :s 1)))
+    (println
+      [(select-keys (:charge-map s') is)
+       (select-keys (:charge-map s') os)])
+    (def s'' (->
+               s
+               (trigger :s 0)
+               (trigger :i1 0)
+               (trigger :i2 0)
+               (trigger :i5 0)))
+    (println
+      [(select-keys (:charge-map s'') is)
+       (select-keys (:charge-map s'') os)])))
