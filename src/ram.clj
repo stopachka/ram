@@ -233,3 +233,20 @@
       "os should be 1 now \n"
       [(select-keys (:charge-map s'') is)
        (select-keys (:charge-map s'') os)])))
+
+; hmm think about this one
+; what should the inputs and outputs be fore these registers?
+;   perhaps they should have their own wires? then a new "connect" functionality,
+;   to wire the inputs and outputs of the wires to the bus
+; also we'll need a better way to test stuff. maybe i can make some helpers to make
+; the comment blocks above a bit simpler
+(defn wire-bus [state bus-wires register-setters register-enablers]
+  (reduce
+    (fn [acc-state [s e]]
+      (wire-register acc-state s e bus-wires bus-wires))
+    state
+    (map vector register-setters register-enablers)))
+
+(comment
+  (do
+    (def bus-wires [:b1 :b2 :b3 :b4 :b5 :b6 :b7])))
