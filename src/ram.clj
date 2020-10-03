@@ -1,8 +1,4 @@
-(ns ram-state
-  (:require [clojure.core.async
-             :refer [go-loop chan alts! >! <! >!!
-                     mult tap]]))
-
+(ns ram)
 
 (def empty-state {:charge-map {} :machines #{}})
 
