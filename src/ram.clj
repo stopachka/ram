@@ -134,6 +134,7 @@
 
 (defn wire-byte [state s in-and-out-wires]
   (reduce (fn [acc-state [i o]]
+            (println :s s :i i :o o)
             (wire-memory-bit acc-state s i o))
           state
           in-and-out-wires))
@@ -153,17 +154,18 @@
               s
               (trigger :i1 1)
               (trigger :i2 1)
-              (trigger :i5 1)
-              (trigger :s 1)))
+              (trigger :i3 1)))
     (println
+      "change i, but do not set o yet \n"
       [(select-keys (:charge-map s') is)
        (select-keys (:charge-map s') os)])
-    (def s'' (->
-               s
-               (trigger :s 0)
-               (trigger :i1 0)
-               (trigger :i2 0)
-               (trigger :i5 0)))
+    (def s'' (-> s' (trigger :s 1)))
     (println
+      "okay, set s, so i1-3 are in os \n"
       [(select-keys (:charge-map s'') is)
-       (select-keys (:charge-map s'') os)])))
+       (select-keys (:charge-map s'') os)])
+    (def s''' (-> s' (trigger :s 0)))
+    (println
+      "okay, disable s, so os are frozen \n"
+      [(select-keys (:charge-map s''') is)
+       (select-keys (:charge-map s''') os)])))
