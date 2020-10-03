@@ -11,6 +11,11 @@
        (filter (fn [{:keys [in]}]
                  (some #{wire} in)))))
 
+(comment
+  (dependent-machines
+    (add-machine empty-state {:in [:a :b] :out :o})
+    :a))
+
 ; naming
 ; ------
 
@@ -28,11 +33,8 @@
 (defn wire-nand-gate [state a b o]
   (add-machine state {:in [a b] :out o}))
 
-
 (comment
-  (def s (wire-nand-gate empty-state :a :b :o))
-  [s
-   (dependent-machines s :a)])
+  (wire-nand-gate empty-state :a :b :o))
 
 ; trigger
 ; -------
@@ -53,11 +55,16 @@
     (reduce (fn [s m] (trigger-machine s m)) state' machines)))
 
 (comment
-  (def s (wire-nand-gate {} :a :b :o))
-  (def s' (trigger s :a 1))
-  s'
-  (def s'' (trigger s' :b 1))
-  s'')
+  (do
+    (def s (wire-nand-gate {} :a :b :o))
+    (def s' (trigger s :a 1))
+    (println
+      "a -> 1, :o -> 1 \n"
+      (:charge-map s'))
+    (def s'' (trigger s' :b 1))
+    (println
+      "a -> 1 b -> 1 o -> 0 \n"
+      (:charge-map s''))))
 
 ;; not-gate
 
@@ -66,11 +73,14 @@
    (wire-nand-gate state a a o)))
 
 (comment
-  (def s (wire-not-gate empty-state :a :o))
-  (def s' (trigger s :a 0))
-  s'
-  (def s'' (trigger s' :a 1))
-  s'')
+  (do
+    (def s (wire-not-gate empty-state :a :o))
+    (def s' (trigger s :a 0))
+    (println
+      "a -> 0 o -> 1 \n" (select-keys (:charge-map s') [:a :o]))
+    (def s'' (trigger s' :a 1))
+    (println
+      "a -> 1 o -> 0 \n" (select-keys (:charge-map s'') [:a :o]))))
 
 (defn wire-and-gate [state a b o]
   (let [nand-o (wire)]
@@ -79,11 +89,15 @@
         (wire-not-gate nand-o o))))
 
 (comment
-  (def s (wire-and-gate empty-state :a :b :o))
-  (def s' (trigger s :a 1))
-  s'
-  (def s'' (trigger s' :b 1))
-  s'')
+  (do
+    (def s (wire-and-gate empty-state :a :b :o))
+    (def s' (trigger s :a 1))
+    s'
+    (println
+      "a -> 1 o -> 0 \n" (select-keys (:charge-map s') [:a :b :o]))
+    (def s'' (trigger s' :b 1))
+    (println
+      "a -> 1 b -> 1 o -> 1 \n" (select-keys (:charge-map s'') [:a :b :o]))))
 
 ;; memory-bit
 
@@ -119,13 +133,21 @@
          (wire-nand-gate b o c)))))
 
 (comment
-  (def s (wire-memory-bit empty-state :s :i :o))
-  (def s' (trigger s :i 1))
-  s'
-  (def s'' (trigger s' :s 1))
-  s''
-  (def s''' (trigger (trigger s'' :s 0) :i 0))
-  s''')
+  (do
+    (def s (wire-memory-bit empty-state :s :i :o))
+    (def s' (trigger s :i 1))
+    s'
+    (println
+      "i -> 1 o -> 0  b/c s -> 0 \n"
+      (select-keys (:charge-map s') [:s :i :o]))
+    (def s'' (trigger s' :s 1))
+    (println
+      "i -> 1 o -> 1  b/c s -> 1 \n"
+      (select-keys (:charge-map s'') [:s :i :o]))
+    (def s''' (trigger (trigger s'' :s 0) :i 0))
+    (println
+      "i -> 0 o -> 1  b/c s -> 0 \n"
+      (select-keys (:charge-map s''') [:s :i :o]))))
 
 ;; byte
 
@@ -140,16 +162,11 @@
     (def is [:i1 :i2 :i3 :i4 :i5 :i6 :i7 :i8])
     (def os [:o1 :o2 :o3 :o4 :o5 :o6 :o7 :o8])
     (def s
-      (wire-byte
-        empty-state
-        :s
-        is
-        os))
-    (def s' (->
-              s
-              (trigger :i1 1)
-              (trigger :i2 1)
-              (trigger :i3 1)))
+      (wire-byte empty-state :s is os))
+    (def s' (-> s
+                (trigger :i1 1)
+                (trigger :i2 1)
+                (trigger :i3 1)))
     (println
       "change i, but do not set o yet \n"
       [(select-keys (:charge-map s') is)
@@ -235,7 +252,7 @@
        (select-keys (:charge-map s'') os)])))
 
 ; hmm think about this one
-; what should the inputs and outputs be fore these registers?
+; what should the inputs and outputs be for these registers?
 ;   perhaps they should have their own wires? then a new "connect" functionality,
 ;   to wire the inputs and outputs of the wires to the bus
 ; also we'll need a better way to test stuff. maybe i can make some helpers to make
