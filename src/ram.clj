@@ -277,8 +277,6 @@
     state
     register-infos))
 
-;; hmm something is going wrong with the bus + naming
-;; if re-eval it tends to stop working
 (comment
   (do
     (def bw (wires :bw 8))
@@ -286,7 +284,7 @@
     (def r2-bits (wires :r2 8))
     (def r3-bits (wires :r3 8))
     (def s (wire-bus empty-state
-                     bus-wires
+                     bw
                      [[:s1 :e1 r1-bits]
                       [:s2 :e2 r2-bits]
                       [:s3 :e3 r3-bits]]))
