@@ -1,54 +1,51 @@
 (ns ram)
 
+; state
+; -----
+
 (def empty-state {:charge-map {} :machines #{}})
-
-;; naming
-
-(def _name-c (atom 0))
-
-(defn uniq-name [s] (keyword (str (name s) "-" (swap! _name-c inc))))
-
-(defn wire [s] (uniq-name s))
-
-;; nand gate
-
 (defn add-machine [s m] (update s :machines conj m))
-
-(defn nand-xf [a b]
-  (if (= a b 1) 0 1))
-
-(defn wire-nand-gate [state a b o]
-  (add-machine
-    state
-    {:name (uniq-name :nand)
-     :in [a b]
-     :f nand-xf
-     :out o}))
-
 (defn dependent-machines [state wire]
   (->> state
        :machines
        (filter (fn [{:keys [in]}]
                  (some #{wire} in)))))
 
+; naming
+; ------
+
+(def _name-c (atom 0))
+(defn wire
+  ([] (wire :w))
+  ([s] (keyword (str (name s) (swap! _name-c inc)))))
+
+; nand
+; ----
+
+(defn nand-xf [a b]
+  (if (= a b 1) 0 1))
+
+(defn wire-nand-gate [state a b o]
+  (add-machine state {:in [a b] :out o}))
+
+
 (comment
   (def s (wire-nand-gate empty-state :a :b :o))
   [s
    (dependent-machines s :a)])
 
-;; trigger
+; trigger
+; -------
 
 (declare trigger)
 
-(defn trigger-machine [state m]
-  (let [wire (:out m)
-        f (:f m)
-        curr-v (get-in state [:charge-map wire])
-        new-v (apply f (map (:charge-map state)
-                            (:in m)))]
+(defn trigger-machine [state {:keys [in out]}]
+  (let [curr-v (get-in state [:charge-map out])
+        new-v (apply nand-xf (map (:charge-map state)
+                                  in))]
     (if (= curr-v new-v)
       state
-      (trigger state wire new-v))))
+      (trigger state out new-v))))
 
 (defn trigger [state wire new-v]
   (let [state' (assoc-in state [:charge-map wire] new-v)
@@ -76,10 +73,10 @@
   s'')
 
 (defn wire-and-gate [state a b o]
-  (let [nand-o-wire (wire :nand-o)]
+  (let [nand-o (wire)]
     (-> state
-        (wire-nand-gate a b nand-o-wire)
-        (wire-not-gate nand-o-wire o))))
+        (wire-nand-gate a b nand-o)
+        (wire-not-gate nand-o o))))
 
 (comment
   (def s (wire-and-gate empty-state :a :b :o))
@@ -112,9 +109,9 @@
 
   "
   ([state s i o]
-   (let [a (wire :mem-a)
-         b (wire :mem-b)
-         c (wire :mem-c)]
+   (let [a (wire)
+         b (wire)
+         c (wire)]
      (-> state
          (wire-nand-gate i s a)
          (wire-nand-gate a s b)
@@ -134,12 +131,10 @@
 
 (defn wire-byte [state s in-and-out-wires]
   (reduce (fn [acc-state [i o]]
-            (println :s s :i i :o o)
             (wire-memory-bit acc-state s i o))
           state
           in-and-out-wires))
 
-;; hmmm something is wacky here : \
 (comment
   (do
     (def is [:i1 :i2 :i3 :i4 :i5 :i6 :i7 :i8])
@@ -164,8 +159,17 @@
       "okay, set s, so i1-3 are in os \n"
       [(select-keys (:charge-map s'') is)
        (select-keys (:charge-map s'') os)])
-    (def s''' (-> s' (trigger :s 0)))
+    (def s''' (-> s'' (trigger :s 0)))
     (println
       "okay, disable s, so os are frozen \n"
       [(select-keys (:charge-map s''') is)
-       (select-keys (:charge-map s''') os)])))
+       (select-keys (:charge-map s''') os)])
+    (def s4 (-> s'''
+                (trigger :i1 0)
+                (trigger :i2 0)
+                (trigger :i3 0)
+                (trigger :i4 1)))
+    (println
+      "i4 should be 1, but only o1-3 should be 1 \n"
+      [(select-keys (:charge-map s4) is)
+       (select-keys (:charge-map s4) os)])))
