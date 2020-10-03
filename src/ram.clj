@@ -38,7 +38,7 @@
 (def w# nth)
 
 (defn read-wires [{:keys [charge-map]} ws]
-  (map charge-map ws))
+  (map #(or (charge-map %) 0) ws))
 
 ; nand
 ; ----
@@ -73,14 +73,14 @@
 (comment
   (do
     (def s (wire-nand-gate {} :a :b :o))
-    (def s' (trigger s :a 1))
+    (def s1 (trigger s :a 1))
     (println
-      "a -> 1, :b -> 0 :o -> 1 \n"
-      (read-wires s' [:a :b :o]))
-    (def s'' (trigger s' :b 1))
+      "a 1, b 0 o 1 \n"
+      (read-wires s1 [:a :b :o]))
+    (def s2 (trigger s1 :b 1))
     (println
-      "a -> 1 b -> 1 o -> 0 \n"
-      (read-wires s'' [:a :b :o]))))
+      "a 1 b 1 o 0 \n"
+      (read-wires s2 [:a :b :o]))))
 
 ;; not-gate
 
@@ -91,12 +91,12 @@
 (comment
   (do
     (def s (wire-not-gate empty-state :a :o))
-    (def s' (trigger s :a 0))
+    (def s2 (trigger s :a 0))
     (println
-      "a -> 0 o -> 1 \n" (read-wires s' [:a :o]))
-    (def s'' (trigger s' :a 1))
+      "a 0 o 1 \n" (read-wires s2 [:a :o]))
+    (def s3 (trigger s2 :a 1))
     (println
-      "a -> 1 o -> 0 \n" (read-wires s'' [:a :o]))))
+      "a 1 o 0 \n" (read-wires s3 [:a :o]))))
 
 (defn wire-and-gate [state a b o]
   (let [nand-o (wire)]
@@ -107,13 +107,12 @@
 (comment
   (do
     (def s (wire-and-gate empty-state :a :b :o))
-    (def s' (trigger s :a 1))
-    s'
+    (def s2 (trigger s :a 1))
     (println
-      "a -> 1 b -> 0 o -> 0 \n" (read-wires s' [:a :b :o]))
-    (def s'' (trigger s' :b 1))
+      "a 1 b 0 o 0 \n" (read-wires s2 [:a :b :o]))
+    (def s3 (trigger s2 :b 1))
     (println
-      "a -> 1 b -> 1 o -> 1 \n" (read-wires s'' [:a :b :o]))))
+      "a 1 b 1 o 1 \n" (read-wires s3 [:a :b :o]))))
 
 ;; memory-bit
 
@@ -151,19 +150,18 @@
 (comment
   (do
     (def s (wire-memory-bit empty-state :s :i :o))
-    (def s' (trigger s :i 1))
-    s'
+    (def s2 (trigger s :i 1))
     (println
-      "b/c s -> 0 / i -> 1 o -> 0  \n"
-      (read-wires s' [:s :i :o]))
-    (def s'' (trigger s' :s 1))
+      "b/c s 0, i 1 o 0  \n"
+      (read-wires s2 [:s :i :o]))
+    (def s3 (trigger s2 :s 1))
     (println
-      "b/c s-> 1 / i -> 1 o -> 1 \n"
-      (read-wires s'' [:s :i :o]))
-    (def s''' (trigger (trigger s'' :s 0) :i 0))
+      "b/c 1, i 1 o 1 \n"
+      (read-wires s3 [:s :i :o]))
+    (def s4 (trigger (trigger s3 :s 0) :i 0))
     (println
-      "b/c s -> 0 / i -> 0 o -> 1 \n"
-      (read-wires s''' [:s :i :o]))))
+      "b/c s 0, i 0 o  1 \n"
+      (read-wires s4 [:s :i :o]))))
 
 ; byte
 ; ----
@@ -180,33 +178,33 @@
     (def os (wires :o 8))
     (def s
       (wire-byte empty-state :s is os))
-    (def s' (-> s
+    (def s2 (-> s
                 (trigger (w# is 0) 1)
                 (trigger (w# is 1) 1)
                 (trigger (w# is 2) 1)))
     (println
       "change i, but do not set o yet \n"
-      [(read-wires s' is)
-       (read-wires s' os)])
-    (def s'' (-> s' (trigger :s 1)))
+      [(read-wires s2 is)
+       (read-wires s2 os)])
+    (def s3 (-> s2 (trigger :s 1)))
     (println
       "okay, set s, so i1-3 are in os \n"
-      [(read-wires s'' is)
-       (read-wires s'' os)])
-    (def s''' (-> s'' (trigger :s 0)))
+      [(read-wires s3 is)
+       (read-wires s3 os)])
+    (def s4 (-> s3 (trigger :s 0)))
     (println
       "okay, disable s, so os are frozen \n"
-      [(read-wires s''' is)
-       (read-wires s''' os)])
-    (def s4 (-> s'''
+      [(read-wires s4 is)
+       (read-wires s4 os)])
+    (def s5 (-> s4
                 (trigger (w# is 0) 0)
                 (trigger (w# is 1) 0)
                 (trigger (w# is 2) 0)
                 (trigger (w# is 3) 1)))
     (println
       "i4 should be 1, but only o1-3 should be 1 \n"
-      [(read-wires s4 is)
-       (read-wires s4 os)])))
+      [(read-wires s5 is)
+       (read-wires s5 os)])))
 
 (defn wire-enabler
   [state e ins outs]
@@ -228,16 +226,16 @@
       "i1-3 should be 1, but os should all be 0 \n"
       [(read-wires s is)
        (read-wires s os)])
-    (def s' (trigger s :e 1))
+    (def s2 (trigger s :e 1))
     (println
       "os should be triggered now \n"
-      [(read-wires s' is)
-       (read-wires s' os)])
-    (def s'' (trigger s :e 0))
+      [(read-wires s2 is)
+       (read-wires s2 os)])
+    (def s3 (trigger s :e 0))
     (println
       "os should be blocked to 0 again \n"
-      [(read-wires s'' is)
-       (read-wires s'' os)])))
+      [(read-wires s3 is)
+       (read-wires s3 os)])))
 
 (defn wire-register [state s e ins bits outs]
   (-> state
@@ -258,18 +256,18 @@
       [(read-wires s is)
        (read-wires s bs)
        (read-wires s os)])
-    (def s' (trigger s :s 1))
+    (def s2 (trigger s :s 1))
     (println
       "b1-3 should be 1, but os should be 0 \n"
-      [(read-wires s' is)
-       (read-wires s' bs)
-       (read-wires s' os)])
-    (def s'' (trigger s' :e 1))
+      [(read-wires s2 is)
+       (read-wires s2 bs)
+       (read-wires s2 os)])
+    (def s3 (trigger s2 :e 1))
     (println
       "os should be 1 now \n"
-      [(read-wires s'' is)
-       (read-wires s'' bs)
-       (read-wires s'' os)])))
+      [(read-wires s3 is)
+       (read-wires s3 bs)
+       (read-wires s3 os)])))
 
 
 (defn wire-bus [state bus-wires register-infos]
@@ -279,7 +277,8 @@
     state
     register-infos))
 
-;; hmm something is going wrong with the bus :thinking:
+;; hmm something is going wrong with the bus + naming
+;; if re-eval it tends to stop working
 (comment
   (do
     (def bw (wires :bw 8))
@@ -291,26 +290,26 @@
                      [[:s1 :e1 r1-bits]
                       [:s2 :e2 r2-bits]
                       [:s3 :e3 r3-bits]]))
-    (def s' (-> s
+    (def s2 (-> s
                 (trigger (w# r1-bits 0) 1)
                 (trigger (w# r1-bits 1) 1)))
     (println
       "set r1 bits. no other reg should be affected \n"
-      [(read-wires s' bw)
-       (read-wires s' r1-bits)
-       (read-wires s' r2-bits)
-       (read-wires s' r3-bits)])
-    (def s'' (-> s' (trigger :e1 1)))
+      [:bus (read-wires s2 bw)
+       :r1 (read-wires s2 r1-bits)
+       :r2 (read-wires s2 r2-bits)
+       :r3 (read-wires s2 r3-bits)])
+    (def s3 (-> s2 (trigger :e1 1)))
     (println
       "enable r1. bus should now have the same charge \n"
-      [(read-wires s'' bw)
-       (read-wires s'' r1-bits)
-       (read-wires s'' r2-bits)
-       (read-wires s'' r3-bits)])
-    (def s''' (-> s'' (trigger :s3 1) (trigger :e1 0)))
+      [:bus (read-wires s3 bw)
+       :r1 (read-wires s3 r1-bits)
+       :r2 (read-wires s3 r2-bits)
+       :r3 (read-wires s3 r3-bits)])
+    (def s4 (-> s3 (trigger :s3 1)))
     (println
       "set r3. charge should now move to r3 \n"
-      [(read-wires s'' bw)
-       (read-wires s'' r1-bits)
-       (read-wires s'' r2-bits)
-       (read-wires s'' r3-bits)])))
+      [:bus (read-wires s4 bw)
+       :r1 (read-wires s4 r1-bits)
+       :r2 (read-wires s4 r2-bits)
+       :r3 (read-wires s4 r3-bits)])))
