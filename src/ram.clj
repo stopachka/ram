@@ -3,7 +3,7 @@
 ; state
 ; -----
 
-(def empty-state {:charge-map {} :machines #{}})
+(def empty-state {:charge-map {} :machines []})
 (defn add-machine [s m] (update s :machines conj m))
 (defn dependent-machines [state wire]
   (->> state
