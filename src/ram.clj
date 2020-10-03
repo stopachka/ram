@@ -129,22 +129,22 @@
 
 ;; byte
 
-(defn wire-byte [state s in-and-out-wires]
+(defn wire-byte [state s ins outs]
   (reduce (fn [acc-state [i o]]
             (wire-memory-bit acc-state s i o))
           state
-          in-and-out-wires))
+          (map vector ins outs)))
 
 (comment
   (do
     (def is [:i1 :i2 :i3 :i4 :i5 :i6 :i7 :i8])
     (def os [:o1 :o2 :o3 :o4 :o5 :o6 :o7 :o8])
-    (def i+o (map vector is os))
     (def s
       (wire-byte
         empty-state
         :s
-        i+o))
+        is
+        os))
     (def s' (->
               s
               (trigger :i1 1)
@@ -173,3 +173,63 @@
       "i4 should be 1, but only o1-3 should be 1 \n"
       [(select-keys (:charge-map s4) is)
        (select-keys (:charge-map s4) os)])))
+
+(defn wire-enabler
+  [state e ins outs]
+  (reduce
+    (fn [acc-state [in out]]
+      (wire-and-gate acc-state e in out))
+    state
+    (map vector ins outs)))
+
+(comment
+  (do
+    (def is [:i1 :i2 :i3 :i4 :i5 :i6 :i7 :i8])
+    (def os [:o1 :o2 :o3 :o4 :o5 :o6 :o7 :o8])
+    (def s (-> (wire-enabler empty-state :e is os)
+               (trigger :i1 1)
+               (trigger :i2 1)
+               (trigger :i3 1)))
+    (println
+      "i1-3 should be 1, but os should all be 0 \n"
+      [(select-keys (:charge-map s) is)
+       (select-keys (:charge-map s) os)])
+    (def s' (trigger s :e 1))
+    (println
+      "os should be triggered now \n"
+      [(select-keys (:charge-map s') is)
+       (select-keys (:charge-map s') os)])
+    (def s'' (trigger s :e 0))
+    (println
+      "os should be blocked to 0 again \n"
+      [(select-keys (:charge-map s'') is)
+       (select-keys (:charge-map s'') os)])))
+
+(defn wire-register [state s e ins outs]
+  (let [byte-os (map (fn [x] (wire (str "b-o-" (name x)))) ins)]
+    (-> state
+        (wire-byte s ins byte-os)
+        (wire-enabler e byte-os outs))))
+
+(comment
+  (do
+    (def is [:i1 :i2 :i3 :i4 :i5 :i6 :i7 :i8])
+    (def os [:o1 :o2 :o3 :o4 :o5 :o6 :o7 :o8])
+    (def s (-> (wire-register empty-state :s :e is os)
+               (trigger :i1 1)
+               (trigger :i2 1)
+               (trigger :i3 1)))
+    (println
+      "i1-3 should be 1, but os should all be 0 \n"
+      [(select-keys (:charge-map s) is)
+       (select-keys (:charge-map s) os)])
+    (def s' (trigger s :s 1))
+    (println
+      "b-o 1-3 should be 1, but os should be 0 \n"
+      [(:charge-map s')
+       (select-keys (:charge-map s') os)])
+    (def s'' (trigger s' :e 1))
+    (println
+      "os should be 1 now \n"
+      [(select-keys (:charge-map s'') is)
+       (select-keys (:charge-map s'') os)])))
