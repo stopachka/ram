@@ -1,4 +1,5 @@
-(ns ram)
+(ns ram
+  (:require [clojure.math.combinatorics :as c]))
 
 ; state
 ; -----
@@ -345,3 +346,65 @@
       "out is 1 since all is are 1"
       [(read-wires s3 is)
        (read-wires s3 [o])])))
+
+; decoder
+; -------
+
+(def wire-mapping (partial c/selections [0 1]))
+
+(defn wire-decoder
+  "a decoder maps input buts to wires that represent each possible selection:
+  [a b] -> [w1 w2 w3 w4]
+  (0 0) w1
+  (0 1) w2
+  (1 0) w3
+  (1 1) w4
+
+  This is done by associating each in to a not gate.
+
+  we then wire the combo of in and not gates onto an and-n gate
+  each and-n gate will _only_ turn on, if the selection it represents is on
+
+  the mapping is produced by
+  "
+  [state ins outs]
+  (let [ins-nots (mapv #(wire (wire-name % :-not)) ins)
+        state' (reduce
+                 (fn [acc-state [in out]]
+                   (wire-not-gate acc-state in out))
+                 state
+                 (map vector ins ins-nots))
+        state'' (reduce
+                  (fn [acc-state [sel out]]
+                    (wire-and-n acc-state
+                                (map-indexed
+                                  (fn [i sign]
+                                    (if (= sign 0)
+                                      (nth ins-nots i)
+                                      (nth ins i)))
+                                  sel)
+                                out))
+                  state'
+                  (map vector (wire-mapping (count ins)) outs))]
+    state''))
+
+(comment
+  (do
+    (def ins (wires :i 4))
+    (def outs (wires :o 16))
+    (def s (wire-decoder empty-state ins outs))
+    (def sels (wire-mapping (count ins)))
+    (def sel (nth sels 5))
+    (def out (nth outs 5))
+    (def s2 (reduce
+              (fn [acc-state [in v]]
+                (trigger acc-state in v))
+              s
+              (map vector ins sel)))
+
+    (println
+      "the correct wire should be 1 \n"
+      (read-wires s2 [out])
+      "rest should be 0 \n"
+      (every? zero? (read-wires s2 (remove #{out} outs)))
+      )))
