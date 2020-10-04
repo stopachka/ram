@@ -60,8 +60,6 @@
 
 (defn trigger-machine [state {:keys [in out]}]
   (let [curr-v (get-in state [:charge-map out])
-        _ (if (= out (w# ios 0))
-            (println "setting!" in out))
         new-v (apply nand-xf (map (:charge-map state)
                                   in))]
     (if (= curr-v new-v)
@@ -103,7 +101,7 @@
       "a 1 o 0 \n" (read-wires s3 [:a :o]))))
 
 (defn wire-and-gate [state a b o]
-  (let [nand-o (wire)]
+  (let [nand-o (wire (wire-name a b :and-nand))]
     (-> state
         (wire-nand-gate a b nand-o)
         (wire-not-gate nand-o o))))
@@ -467,41 +465,49 @@
     (def ios (wires :ios 8))
     (def rs (wires :r 8))
     (def s (wire-io empty-state :s :e ios :w1 :w2 rs))
+    ; todo: if i set :s at the end, ios gets set incorrectly
+    ; i am _not_ sure exactly why. would be interesting to play with this
     (def s2 (-> s
+                (trigger :s 1)
                 (trigger (w# ios 0) 1)
                 (trigger (w# ios 1) 1)
                 (trigger :e 1)))
     (println
-      ["io enabled and set, but register not affected, as intersection not on \n"
-       :ios (read-wires s2 ios)
-       :e (read-wires s2 [:e])
-       :rs (read-wires s2 rs)])))
+      ["io set & enabled, but register not affected \n"
+       :ios (read-wires s2 ios) "\n"
+       :e (read-wires s2 [:e]) "\n"
+       :rs (read-wires s2 rs)])
+    (def s3 (-> s2
+                (trigger :w1 1)
+                (trigger :w2 1)))
+    (println
+      ["io set & enabled, intersection enabled, register got value \n"
+       :ios (read-wires s3 ios) "\n"
+       :e (read-wires s3 [:e]) "\n"
+       :rs (read-wires s3 rs)])))
 
-(defn wire-ram [state mar-is set-mar bus bus-s bus-e]
-  (let [mar-o (wires :mar-o 8)
-        mar-first-4 (take 4 mar-o)
-        mar-last-4 (drop 4 mar-o)
-        mar-first-4-decode-outs (wires :mar-dec-f 16)
-        mar-last-4-decode-outs (wires :mar-dec-l 16)
-        state' (-> state
-                   (wire-byte set-mar mar-is mar-o)
-                   (wire-decoder mar-first-4 mar-first-4-decode-outs)
-                   (wire-decoder mar-last-4 mar-last-4-decode-outs))
-
-        intersections (c/cartesian-product mar-first-4-decode-outs mar-last-4-decode-outs)
+(defn wire-ram [state set-mar mar-is io-s io-e ios]
+  (let [mar-os (wires :mar-o 8)
+        mar-first-4-outs (wires :mar-dec-f 16)
+        mar-last-4-outs (wires :mar-dec-l 16)
+        state' (wire-mar state set-mar mar-is mar-os mar-first-4-outs mar-first-4-outs)
+        intersections (c/cartesian-product mar-first-4-outs mar-last-4-outs)
         state'' (reduce
                   (fn [acc-state [fw lw]]
-                    (wire-io acc-state fw lw bus-s bus-e bus))
+                    (wire-io acc-state io-s io-e ios fw lw
+                             (wires (wire-name fw lw :rb) 8)))
                   state'
                   intersections)]
     state''))
 
-
+; hmm, okay, next up:
+; a. make this fast
+; b. make it easier to test out
 (comment
   (do
     (def mar-is (wires :mar-i 8))
-    (def bus (wires :bus 8))
-    (def s (wire-ram empty-state mar-is :set-mar bus :bus-s :bus-e))
+    (def ios (wires :io 8))
+    (def s (wire-ram empty-state :set-mar mar-is :io-s :io-e ios))
     (def s' (-> s
                 (trigger (w# mar-is 0) 1)
                 (trigger (w# mar-is 5) 1)))))
