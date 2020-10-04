@@ -403,8 +403,8 @@
               (map vector ins sel)))
 
     (println
-      "the correct wire should be 1 \n"
-      (read-wires s2 [out])
-      "rest should be 0 \n"
+      "the correct wire should be 1: "
+      (read-wires s2 [out]) "\n"
+      "rest should be 0: "
       (every? zero? (read-wires s2 (remove #{out} outs)))
       )))
