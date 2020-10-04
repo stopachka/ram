@@ -82,7 +82,8 @@
       "a 1 b 1 o 0 \n"
       (read-wires s2 [:a :b :o]))))
 
-;; not-gate
+; not
+; ---
 
 (defn wire-not-gate
   ([state a o]
@@ -114,7 +115,8 @@
     (println
       "a 1 b 1 o 1 \n" (read-wires s3 [:a :b :o]))))
 
-;; memory-bit
+; memory-bit
+; ----------
 
 (defn wire-memory-bit
   "
@@ -311,3 +313,35 @@
        :r1 (read-wires s4 r1-bits)
        :r2 (read-wires s4 r2-bits)
        :r3 (read-wires s4 r3-bits)])))
+
+; and-n
+; -----
+
+(defn wire-and-n [state ins out]
+  (let [[a b] (take 2 ins)
+        rem (drop 2 ins)]
+    (if-not (seq rem)
+      (wire-and-gate state a b out)
+      (let [w (wire (wire-name a b :-and))]
+        (wire-and-n
+          (wire-and-gate state a b w)
+          (list* w rem)
+          out)))))
+
+(comment
+  (do
+    (def is [:a :b :c :d :e])
+    (def o :f)
+    (def s (wire-and-n empty-state
+                       is
+                       o))
+    (def s2 (trigger s (w# is 0) 1))
+    (println
+      "out is 0 since some is are 0"
+      [(read-wires s2 is)
+       (read-wires s2 [o])])
+    (def s3 (reduce #(trigger %1 %2 1) s2 is))
+    (println
+      "out is 1 since all is are 1"
+      [(read-wires s3 is)
+       (read-wires s3 [o])])))
