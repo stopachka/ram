@@ -1,5 +1,6 @@
 (ns ram
-  (:require [clojure.math.combinatorics :as c]))
+  (:require [clojure.math.combinatorics :as c]
+            [clojure.set :as set]))
 
 ; wires
 ; ------
@@ -30,19 +31,19 @@
 ; state
 ; -----
 
-(def empty-state {:charge-map {} :machines []})
-(defn add-machine [s m] (update s :machines conj m))
-(defn dependent-machines [state wire]
-  (->> state
-       :machines
-       (filter (fn [{:keys [in]}]
-                 (some #{wire} in)))))
+(def empty-state {:charge-map {} :out->ins {} :in->outs {}})
+
+(defn add-machine [s {:keys [ins out]}]
+  (reduce
+    (fn [acc-state in]
+      (update-in acc-state [:in->outs in] set/union #{out}))
+    (assoc-in s [:out->ins out] ins)
+    ins))
+
 
 (comment
-  (dependent-machines
-    (add-machine empty-state {:in [:a :b]
-                              :out :o})
-    :a))
+  (add-machine empty-state {:ins [:a :b]
+                            :out :o}))
 
 ; nand
 ; ----
@@ -51,7 +52,7 @@
   (if (= a b 1) 0 1))
 
 (defn wire-nand-gate [state a b o]
-  (add-machine state {:in [a b] :out o}))
+  (add-machine state {:ins [a b] :out o}))
 
 (comment
   (wire-nand-gate empty-state :a :b :o))
@@ -74,29 +75,30 @@
 
 (declare trigger)
 
-(defn trigger-machine [state {:keys [in out]}]
-  (let [new-v (apply nand-xf (charges state in))]
+(defn trigger-out [{:keys [out->ins] :as state} out]
+  (let [ins (out->ins out)
+        new-v (apply nand-xf (charges state ins))]
     (trigger
-      (apply kw (conj in out))
+      (apply kw (conj ins out))
       state out new-v)))
 
 (defn trigger
   ([source state wire new-v]
-   (let [state' (set-charge source state wire new-v)
-         old-c (charge state wire)
+   (let [old-c (charge state wire)
+         state' (set-charge source state wire new-v)
          new-c (charge state' wire)]
      (if (= old-c new-c)
        state'
-       (reduce (fn [s m] (trigger-machine s m))
+       (reduce (fn [s out] (trigger-out s out))
                state'
-               (dependent-machines state' wire))))))
+               ((:in->outs state) wire))))))
 
-(defn simulate-circuit [{:keys [machines] :as state}]
+(defn simulate-circuit [{:keys [out->ins] :as state}]
   (reduce
-    (fn [acc-state m]
-      (trigger-machine acc-state m))
+    (fn [acc-state out]
+      (trigger-out acc-state out))
     state
-    machines))
+    (keys out->ins)))
 
 (comment
   (do
@@ -534,15 +536,54 @@
                   intersections)]
     state''))
 
-; hmm, okay, next up:
-; a. make this fast
-; b. make it easier to test out
+(defn set-charges [state is vs]
+  (let [state' (reduce
+                 (fn [acc-state [i v]]
+                   (set-charge acc-state i v))
+                 state
+                 (map vector is vs))]
+    (-> state')))
+
+(defn ram-repl []
+  (let [mar-is (wires :mar-i 8)
+        ios (wires :mar-io 8)
+        out-rs (wires :out-r 8)
+        initial-state (-> empty-state
+                          (wire-ram :mar-s mar-is :io-s :io-e ios)
+                          (wire-register :out-s :out-e ios out-rs ios))]
+    (loop [state initial-state]
+      (let [input (read-string (read-line))
+            cmd (first input)]
+        (condp = cmd
+          'read
+          (let [state' (-> state
+                           (set-charges mar-is (second input))
+                           (set-charge :mar-s 1)
+                           (set-charge :io-e 1)
+                           simulate-circuit
+                           (set-charge :io-e 0)
+                           (set-charge :mar-s 0)
+                           simulate-circuit)]
+
+            (println
+              "selected reg value: \n"
+              (charges state' ios))
+            (recur state'))
+          'write
+          (let [state' (-> state
+                           (set-charge mar-is (second input))
+                           (set-charge ios (nth input 2))
+                           (set-charge :mar-s 1)
+                           (set-charge :io-s 1)
+                           simulate-circuit
+                           (set-charge :mar-s 0)
+                           (set-charge :io-s 0)
+                           (set-charge ios '(0 0 0 0 0 0 0 0))
+                           simulate-circuit)]
+            (println "ok")
+            (recur state'))
+          'exit
+          nil)))))
+
 (comment
-  (do
-    (def mar-is (wires :mar-i 8))
-    (def ios (wires :io 8))
-    (def s (wire-ram empty-state :set-mar mar-is :io-s :io-e ios))
-    (def s' (-> s
-                (set-charge (w# mar-is 0) 1)
-                (set-charge (w# mar-is 5) 1)
-                simulate-circuit))))
+  (ram-repl))
