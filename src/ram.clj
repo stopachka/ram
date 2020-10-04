@@ -517,7 +517,7 @@
                 (set-charge :w2 1)
                 simulate-circuit))
     (println
-      ["io set & enabled, intersection enabled, register got value \n"
+      ["io set, intersection enabled, register got value \n"
        :ios (charges s3 ios) "\n"
        :e (charges s3 [:e]) "\n"
        :rs (charges s3 rs)])))
@@ -584,6 +584,11 @@
             (recur state'))
           'exit
           nil)))))
+
+; --
+; current stage
+; a. look into bus -- why is r1 being affected?
+; b. clean up and get the repl working
 
 (comment
   (ram-repl))
