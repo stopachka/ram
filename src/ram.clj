@@ -60,6 +60,8 @@
 
 (defn trigger-machine [state {:keys [in out]}]
   (let [curr-v (get-in state [:charge-map out])
+        _ (if (= out (w# ios 0))
+            (println "setting!" in out))
         new-v (apply nand-xf (map (:charge-map state)
                                   in))]
     (if (= curr-v new-v)
@@ -286,9 +288,9 @@
     (def r1-bits (wires :r1 8))
     (def r2-bits (wires :r2 8))
     (def r3-bits (wires :r3 8))
-    (def s (wire-bus empty-state
-                     bw
-                     [[:s1 :e1 r1-bits]
+    (def s (wire-io empty-state
+                    bw
+                    [[:s1 :e1 r1-bits]
                       [:s2 :e2 r2-bits]
                       [:s3 :e3 r3-bits]]))
     (def s2 (-> s
@@ -411,16 +413,69 @@
 ; ram
 ; ---
 
-(defn wire-intersections [state fw lw bus-s bus-e bus]
-  (let [x (wire (wire-name fw lw :x))
-        s (wire (wire-name fw lw :s))
-        e (wire (wire-name fw lw :e))
-        register-bits (wires (wire-name fw lw :rb) 8)]
+(defn wire-mar
+  "mar: memory access register
+
+  This sets up a register with a grid of decoders.
+
+  When a byte is set into the mar register, only _1_ intersection
+  will be active in the grid.
+  "
+  [state s is os first-4-outs last-4-outs]
+  (-> state
+      (wire-byte s is os)
+      (wire-decoder (take 4 os) first-4-outs)
+      (wire-decoder (drop 4 os) last-4-outs)))
+
+(comment
+  (do
+    (def is (wires :i 8))
+    (def os (wires :o 8))
+    (def first-4-outs (wires :fw 16))
+    (def last-4-outs (wires :lw 16))
+    (def s (wire-mar empty-state :s is os first-4-outs last-4-outs))
+    (def s2 (-> s
+                (trigger (w# is 0) 1)
+                (trigger (w# is 5) 1)
+                (trigger :s 1)
+                (trigger :s 0)))
+    (println
+      ["os are set \n"
+       (read-wires s2 os) "\n"
+       "only 1 wire on in first-4-outs \n"
+       (read-wires s2 first-4-outs) "\n"
+       "only 1 wire on in last-4-outs \n"
+       (read-wires s2 last-4-outs)])))
+
+(defn wire-io
+  "for each intersection, we will set up a register.
+
+  this register can be set and updated by the io bus's io-s and io-e"
+  [state io-s io-e ios decoder-o-1 decoder-o-2 register-bits]
+  (let [x (wire (wire-name decoder-o-1 decoder-o-2 :x))
+        s (wire (wire-name decoder-o-1 decoder-o-2 :s))
+        e (wire (wire-name decoder-o-1 decoder-o-2 :e))]
     (-> state
-        (wire-and-gate fw lw x)
-        (wire-and-gate x bus-s s)
-        (wire-and-gate x bus-e e)
-        (wire-register s e bus register-bits bus))))
+        (wire-and-gate decoder-o-1 decoder-o-2 x)
+        (wire-and-gate x io-s s)
+        (wire-and-gate x io-e e)
+        (wire-register s e ios register-bits ios))))
+
+;; hm something is off here :thinking:
+(comment
+  (do
+    (def ios (wires :ios 8))
+    (def rs (wires :r 8))
+    (def s (wire-io empty-state :s :e ios :w1 :w2 rs))
+    (def s2 (-> s
+                (trigger (w# ios 0) 1)
+                (trigger (w# ios 1) 1)
+                (trigger :e 1)))
+    (println
+      ["io enabled and set, but register not affected, as intersection not on \n"
+       :ios (read-wires s2 ios)
+       :e (read-wires s2 [:e])
+       :rs (read-wires s2 rs)])))
 
 (defn wire-ram [state mar-is set-mar bus bus-s bus-e]
   (let [mar-o (wires :mar-o 8)
@@ -436,7 +491,7 @@
         intersections (c/cartesian-product mar-first-4-decode-outs mar-last-4-decode-outs)
         state'' (reduce
                   (fn [acc-state [fw lw]]
-                    (wire-intersections acc-state fw lw bus-s bus-e bus))
+                    (wire-io acc-state fw lw bus-s bus-e bus))
                   state'
                   intersections)]
     state''))
@@ -446,4 +501,7 @@
   (do
     (def mar-is (wires :mar-i 8))
     (def bus (wires :bus 8))
-    (def s (wire-ram empty-state mar-is :set-mar bus :bus-s :bus-e))))
+    (def s (wire-ram empty-state mar-is :set-mar bus :bus-s :bus-e))
+    (def s' (-> s
+                (trigger (w# mar-is 0) 1)
+                (trigger (w# mar-is 5) 1)))))
