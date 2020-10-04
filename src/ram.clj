@@ -165,6 +165,34 @@
     (println
       "change i, but do not set o yet \n"
       [(charges s2 is)
+       "ah f**
+
+       so it _does_ set the o to 1, even the though `s` bit was off. why?
+
+       b/c: when I run `simulate-circuit`, it can go in weird orders, like so:
+
+       say i is 0 and s 1 (see diagram above)
+
+       find o: o checks for input a and output of c. but at this point c is not computed
+
+       c 0 a 1. bam so it sets o to 1 : ( (PROBLEM A)
+
+       then when time to calculate c comes around, we check for o, and say:
+
+       input b: 1 o: 1 -> c 0
+
+       then c goes up and recounts o again: says
+
+       c 0 a 1 -> still o 1
+
+       the problem is that perhaps it wasn't true to calculate at PROBLEM A.
+
+       at that point we didn't _know_ the charge of c.
+
+       Buut, if we do some kind of dag, how do we know what comes first? the nand-gate of c or o?
+
+       they _both_ connect to eachother
+       "
        (charges s2 os)])
     (def s3 (-> s2 (set-charge :s 1) simulate-circuit))
     (println
