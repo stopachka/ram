@@ -40,11 +40,6 @@
     (assoc-in s [:out->ins out] ins)
     ins))
 
-
-(comment
-  (add-machine empty-state {:ins [:a :b]
-                            :out :o}))
-
 ; nand
 ; ----
 
@@ -53,9 +48,6 @@
 
 (defn wire-nand-gate [state a b o]
   (add-machine state {:ins [a b] :out o}))
-
-(comment
-  (wire-nand-gate empty-state :a :b :o))
 
 ; trigger
 ; -------
@@ -75,7 +67,8 @@
 
 (declare trigger)
 
-(defn trigger-out [{:keys [out->ins] :as state} out]
+(defn trigger-out
+  [{:keys [out->ins] :as state} out]
   (let [ins (out->ins out)
         new-v (apply nand-xf (charges state ins))]
     (trigger
@@ -83,6 +76,7 @@
       state out new-v)))
 
 (defn trigger
+  ([state wire new-v] (trigger :repl state wire new-v))
   ([source state wire new-v]
    (let [old-c (charge state wire)
          state' (set-charge source state wire new-v)
@@ -100,17 +94,6 @@
     state
     (keys out->ins)))
 
-(comment
-  (do
-    (def s (wire-nand-gate empty-state :a :b :o))
-    (def s1 (simulate-circuit (set-charge s :a 1)))
-    (println
-      "a 1, b 0 o 1 \n"
-      (charges s1 [:a :b :o]))
-    (def s2 (simulate-circuit (set-charge s1 :b 1)))
-    (println
-      "a 1 b 1 o 0 \n"
-      (charges s2 [:a :b :o]))))
 
 ; not
 ; ---
@@ -119,31 +102,11 @@
   ([state a o]
    (wire-nand-gate state a a o)))
 
-(comment
-  (do
-    (def s (wire-not-gate empty-state :a :o))
-    (def s2 (simulate-circuit (set-charge s :a 0)))
-    (println
-      "a 0 o 1 \n" (charges s2 [:a :o]))
-    (def s3 (simulate-circuit (set-charge s2 :a 1)))
-    (println
-      "a 1 o 0 \n" (charges s3 [:a :o]))))
-
 (defn wire-and-gate [state a b o]
   (let [nand-o (wire (kw a b :and-nand))]
     (-> state
         (wire-nand-gate a b nand-o)
         (wire-not-gate nand-o o))))
-
-(comment
-  (do
-    (def s (wire-and-gate empty-state :a :b :o))
-    (def s2 (simulate-circuit (set-charge :repl s :a 1)))
-    (println
-      "a 1 b 0 o 0 \n" (charges s2 [:a :b :o]))
-    (def s3 (simulate-circuit (set-charge :repl s2 :b 1)))
-    (println
-      "a 1 b 1 o 1 \n" (charges s3 [:a :b :o]))))
 
 ; memory-bit
 ; ----------
@@ -170,34 +133,14 @@
 
   "
   ([state s i o]
-   (let [a (wire)
-         b (wire)
-         c (wire)]
+   (let [a (wire :a)
+         b (wire :b)
+         c (wire :c)]
      (-> state
          (wire-nand-gate i s a)
          (wire-nand-gate a s b)
          (wire-nand-gate a c o)
          (wire-nand-gate b o c)))))
-
-(comment
-  (do
-    (def s (wire-memory-bit empty-state :s :i :o))
-    (def s2 (simulate-circuit (set-charge :repl s :i 1)))
-    (println
-      "b/c s 0, i 1 o 0  \n"
-      (charges s2 [:s :i :o]))
-    (def s3 (simulate-circuit (set-charge :repl s2 :s 1)))
-    (println
-      "b/c 1, i 1 o 1 \n"
-      (charges s3 [:s :i :o]))
-    (def s4 (simulate-circuit
-              (set-charge :repl
-                          (set-charge :repl s3 :s 0)
-                          :i
-                          0)))
-    (println
-      "b/c s 0, i 0 o  1 \n"
-      (charges s4 [:s :i :o]))))
 
 ; byte
 ; ----
