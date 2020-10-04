@@ -406,5 +406,44 @@
       "the correct wire should be 1: "
       (read-wires s2 [out]) "\n"
       "rest should be 0: "
-      (every? zero? (read-wires s2 (remove #{out} outs)))
-      )))
+      (every? zero? (read-wires s2 (remove #{out} outs))))))
+
+; ram
+; ---
+
+(defn wire-intersections [state fw lw bus-s bus-e bus]
+  (let [x (wire (wire-name fw lw :x))
+        s (wire (wire-name fw lw :s))
+        e (wire (wire-name fw lw :e))
+        register-bits (wires (wire-name fw lw :rb) 8)]
+    (-> state
+        (wire-and-gate fw lw x)
+        (wire-and-gate x bus-s s)
+        (wire-and-gate x bus-e e)
+        (wire-register s e bus register-bits bus))))
+
+(defn wire-ram [state mar-is set-mar bus bus-s bus-e]
+  (let [mar-o (wires :mar-o 8)
+        mar-first-4 (take 4 mar-o)
+        mar-last-4 (drop 4 mar-o)
+        mar-first-4-decode-outs (wires :mar-dec-f 16)
+        mar-last-4-decode-outs (wires :mar-dec-l 16)
+        state' (-> state
+                   (wire-byte set-mar mar-is mar-o)
+                   (wire-decoder mar-first-4 mar-first-4-decode-outs)
+                   (wire-decoder mar-last-4 mar-last-4-decode-outs))
+
+        intersections (c/cartesian-product mar-first-4-decode-outs mar-last-4-decode-outs)
+        state'' (reduce
+                  (fn [acc-state [fw lw]]
+                    (wire-intersections acc-state fw lw bus-s bus-e bus))
+                  state'
+                  intersections)]
+    state''))
+
+
+(comment
+  (do
+    (def mar-is (wires :mar-i 8))
+    (def bus (wires :bus 8))
+    (def s (wire-ram empty-state mar-is :set-mar bus :bus-s :bus-e))))
