@@ -67,6 +67,11 @@
 (defn charges [state ws]
   (map (partial charge state) ws))
 
+(defn set-charge
+  ([state w v] (set-charge :repl state w v))
+  ([source state w v]
+   (assoc-in state [:charge-map w source] v)))
+
 (declare trigger)
 
 (defn trigger-machine [state {:keys [in out]}]
@@ -76,21 +81,31 @@
       state out new-v)))
 
 (defn trigger
-  ([state wire new-v] (trigger :repl state wire new-v))
   ([source state wire new-v]
-   (let [state' (assoc-in state [:charge-map wire source] new-v)]
-     (reduce (fn [s m] (trigger-machine s m))
-             state'
-             (dependent-machines state' wire)))))
+   (let [state' (set-charge source state wire new-v)
+         old-c (charge state wire)
+         new-c (charge state' wire)]
+     (if (= old-c new-c)
+       state'
+       (reduce (fn [s m] (trigger-machine s m))
+               state'
+               (dependent-machines state' wire))))))
+
+(defn simulate-circuit [{:keys [machines] :as state}]
+  (reduce
+    (fn [acc-state m]
+      (trigger-machine acc-state m))
+    state
+    machines))
 
 (comment
   (do
     (def s (wire-nand-gate empty-state :a :b :o))
-    (def s1 (trigger s :a 1))
+    (def s1 (simulate-circuit (set-charge s :a 1)))
     (println
       "a 1, b 0 o 1 \n"
       (charges s1 [:a :b :o]))
-    (def s2 (trigger s1 :b 1))
+    (def s2 (simulate-circuit (set-charge s1 :b 1)))
     (println
       "a 1 b 1 o 0 \n"
       (charges s2 [:a :b :o]))))
@@ -105,10 +120,10 @@
 (comment
   (do
     (def s (wire-not-gate empty-state :a :o))
-    (def s2 (trigger s :a 0))
+    (def s2 (simulate-circuit (set-charge s :a 0)))
     (println
       "a 0 o 1 \n" (charges s2 [:a :o]))
-    (def s3 (trigger s2 :a 1))
+    (def s3 (simulate-circuit (set-charge s2 :a 1)))
     (println
       "a 1 o 0 \n" (charges s3 [:a :o]))))
 
@@ -121,10 +136,10 @@
 (comment
   (do
     (def s (wire-and-gate empty-state :a :b :o))
-    (def s2 (trigger s :a 1))
+    (def s2 (simulate-circuit (set-charge :repl s :a 1)))
     (println
       "a 1 b 0 o 0 \n" (charges s2 [:a :b :o]))
-    (def s3 (trigger s2 :b 1))
+    (def s3 (simulate-circuit (set-charge :repl s2 :b 1)))
     (println
       "a 1 b 1 o 1 \n" (charges s3 [:a :b :o]))))
 
@@ -165,15 +180,19 @@
 (comment
   (do
     (def s (wire-memory-bit empty-state :s :i :o))
-    (def s2 (trigger s :i 1))
+    (def s2 (simulate-circuit (set-charge :repl s :i 1)))
     (println
       "b/c s 0, i 1 o 0  \n"
       (charges s2 [:s :i :o]))
-    (def s3 (trigger s2 :s 1))
+    (def s3 (simulate-circuit (set-charge :repl s2 :s 1)))
     (println
       "b/c 1, i 1 o 1 \n"
       (charges s3 [:s :i :o]))
-    (def s4 (trigger (trigger s3 :s 0) :i 0))
+    (def s4 (simulate-circuit
+              (set-charge :repl
+                          (set-charge :repl s3 :s 0)
+                          :i
+                          0)))
     (println
       "b/c s 0, i 0 o  1 \n"
       (charges s4 [:s :i :o]))))
@@ -194,28 +213,30 @@
     (def s
       (wire-byte empty-state :s is os))
     (def s2 (-> s
-                (trigger (w# is 0) 1)
-                (trigger (w# is 1) 1)
-                (trigger (w# is 2) 1)))
+                (set-charge (w# is 0) 1)
+                (set-charge (w# is 1) 1)
+                (set-charge (w# is 2) 1)
+                simulate-circuit))
     (println
       "change i, but do not set o yet \n"
       [(charges s2 is)
        (charges s2 os)])
-    (def s3 (-> s2 (trigger :s 1)))
+    (def s3 (-> s2 (set-charge :s 1) simulate-circuit))
     (println
       "okay, set s, so i1-3 are in os \n"
       [(charges s3 is)
        (charges s3 os)])
-    (def s4 (-> s3 (trigger :s 0)))
+    (def s4 (-> s3 (set-charge :s 0) simulate-circuit))
     (println
       "okay, disable s, so os are frozen \n"
       [(charges s4 is)
        (charges s4 os)])
     (def s5 (-> s4
-                (trigger (w# is 0) 0)
-                (trigger (w# is 1) 0)
-                (trigger (w# is 2) 0)
-                (trigger (w# is 3) 1)))
+                (set-charge (w# is 0) 0)
+                (set-charge (w# is 1) 0)
+                (set-charge (w# is 2) 0)
+                (set-charge (w# is 3) 1)
+                simulate-circuit))
     (println
       "i4 should be 1, but only o1-3 should be 1 \n"
       [(charges s5 is)
@@ -234,19 +255,20 @@
     (def is (wires :i 8))
     (def os (wires :o 8))
     (def s (-> (wire-enabler empty-state :e is os)
-               (trigger (w# is 0) 1)
-               (trigger (w# is 1) 1)
-               (trigger (w# is 2) 1)))
+               (set-charge (w# is 0) 1)
+               (set-charge (w# is 1) 1)
+               (set-charge (w# is 2) 1)
+               simulate-circuit))
     (println
       "i1-3 should be 1, but os should all be 0 \n"
       [(charges s is)
        (charges s os)])
-    (def s2 (trigger s :e 1))
+    (def s2 (simulate-circuit (set-charge s :e 1)))
     (println
       "os should be triggered now \n"
       [(charges s2 is)
        (charges s2 os)])
-    (def s3 (trigger s :e 0))
+    (def s3 (simulate-circuit (set-charge s :e 0)))
     (println
       "os should be blocked to 0 again \n"
       [(charges s3 is)
@@ -263,21 +285,22 @@
     (def bs (wires :b 8))
     (def os (wires :o 8))
     (def s (-> (wire-register empty-state :s :e is bs os)
-               (trigger (w# is 0) 1)
-               (trigger (w# is 1) 1)
-               (trigger (w# is 2) 1)))
+               (set-charge (w# is 0) 1)
+               (set-charge (w# is 1) 1)
+               (set-charge (w# is 2) 1)
+               simulate-circuit))
     (println
       "i1-3 should be 1, but os should all be 0 \n"
       [(charges s is)
        (charges s bs)
        (charges s os)])
-    (def s2 (trigger s :s 1))
+    (def s2 (simulate-circuit (set-charge s :s 1)))
     (println
       "b1-3 should be 1, but os should be 0 \n"
       [(charges s2 is)
        (charges s2 bs)
        (charges s2 os)])
-    (def s3 (trigger s2 :e 1))
+    (def s3 (simulate-circuit (set-charge s2 :e 1)))
     (println
       "os should be 1 now \n"
       [(charges s3 is)
@@ -304,22 +327,23 @@
                       [:s2 :e2 r2-bits]
                       [:s3 :e3 r3-bits]]))
     (def s2 (-> s
-                (trigger (w# r1-bits 0) 1)
-                (trigger (w# r1-bits 1) 1)))
+                (set-charge (w# r1-bits 0) 1)
+                (set-charge (w# r1-bits 1) 1)
+                simulate-circuit))
     (println
       "set r1 bits. no other reg should be affected \n"
       [:bus (charges s2 bw)
        :r1 (charges s2 r1-bits)
        :r2 (charges s2 r2-bits)
        :r3 (charges s2 r3-bits)])
-    (def s3 (-> s2 (trigger :e1 1)))
+    (def s3 (-> s2 (set-charge :e1 1) simulate-circuit))
     (println
       "enable r1. bus should now have the same charge \n"
       [:bus (charges s3 bw)
        :r1 (charges s3 r1-bits)
        :r2 (charges s3 r2-bits)
        :r3 (charges s3 r3-bits)])
-    (def s4 (-> s3 (trigger :s3 1)))
+    (def s4 (-> s3 (set-charge :s3 1) simulate-circuit))
     (println
       "set r3. charge should now move to r3 \n"
       [:bus (charges s4 bw)
@@ -348,12 +372,12 @@
     (def s (wire-and-n empty-state
                        is
                        o))
-    (def s2 (trigger s (w# is 0) 1))
+    (def s2 (simulate-circuit (set-charge s (w# is 0) 1)))
     (println
       "out is 0 since some is are 0"
       [(charges s2 is)
        (charges s2 [o])])
-    (def s3 (reduce #(trigger %1 %2 1) s2 is))
+    (def s3 (simulate-circuit (reduce #(set-charge %1 %2 1) s2 is)))
     (println
       "out is 1 since all is are 1"
       [(charges s3 is)
@@ -392,7 +416,6 @@
                                       (nth ins-nots i)
                                       (nth ins i)))
                                   sel)]
-                      (println and-ins out)
                       (wire-and-n acc-state and-ins out)))
                   state'
                   (map vector (wire-mapping (count ins)) outs))]
@@ -406,18 +429,18 @@
     (def sels (wire-mapping (count ins)))
     (def sel (nth sels 5))
     (def out (nth outs 5))
-    (def s2 (reduce
-              (fn [acc-state [in v]]
-                (trigger acc-state in v))
-              s
-              (map vector ins sel)))
+    (def s2 (simulate-circuit (reduce
+                                (fn [acc-state [in v]]
+                                  (set-charge :repl acc-state in v))
+                                s
+                                (map vector ins sel))))
 
     (println
       (charges s2 ins)
       "the correct wire should be 1: "
       (charges s2 [out]) "\n"
       "rest should be 0: "
-      (charges s2 (remove #{out} outs)))))
+      (every? zero? (charges s2 (remove #{out} outs))))))
 
 ; ram
 ; ---
@@ -444,10 +467,12 @@
     (def last-4-outs (wires :lw 16))
     (def s (wire-mar empty-state :s is os first-4-outs last-4-outs))
     (def s2 (-> s
-                (trigger (w# is 0) 1)
-                (trigger (w# is 5) 1)
-                (trigger :s 1)
-                (trigger :s 0)))
+                (set-charge (w# is 0) 1)
+                (set-charge (w# is 5) 1)
+                (set-charge :s 1)
+                simulate-circuit
+                (set-charge :s 0)
+                simulate-circuit))
     (println
       ["os are set \n"
        (charges s2 os) "\n"
@@ -476,17 +501,19 @@
     (def rs (wires :r 8))
     (def s (wire-io empty-state :s :e ios :w1 :w2 rs))
     (def s2 (-> s
-                (trigger (w# ios 0) 1)
-                (trigger (w# ios 1) 1)
-                (trigger :s 1)))
+                (set-charge (w# ios 0) 1)
+                (set-charge (w# ios 1) 1)
+                (set-charge :s 1)
+                simulate-circuit))
     (println
-      ["io set & enabled, but register not affected \n"
+      ["io set, but register not affected \n"
        :ios (charges s2 ios) "\n"
        :e (charges s2 [:e]) "\n"
        :rs (charges s2 rs)])
     (def s3 (-> s2
-                (trigger :w1 1)
-                (trigger :w2 1)))
+                (set-charge :w1 1)
+                (set-charge :w2 1)
+                simulate-circuit))
     (println
       ["io set & enabled, intersection enabled, register got value \n"
        :ios (charges s3 ios) "\n"
@@ -516,5 +543,6 @@
     (def ios (wires :io 8))
     (def s (wire-ram empty-state :set-mar mar-is :io-s :io-e ios))
     (def s' (-> s
-                (trigger (w# mar-is 0) 1)
-                (trigger (w# mar-is 5) 1)))))
+                (set-charge (w# mar-is 0) 1)
+                (set-charge (w# mar-is 5) 1)
+                simulate-circuit))))
