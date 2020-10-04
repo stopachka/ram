@@ -459,7 +459,6 @@
         (wire-and-gate x io-e e)
         (wire-register s e ios register-bits ios))))
 
-;; hm something is off here :thinking:
 (comment
   (do
     (def ios (wires :ios 8))
