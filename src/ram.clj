@@ -1,6 +1,6 @@
 (ns ram
   (:require [clojure.math.combinatorics :as c]
-            [clojure.set :as set]))
+            [clojure.string :as str]))
 
 ; wires
 ; ------
@@ -26,15 +26,29 @@
 (defn wires [n r]
   (mapv (fn [i] (wire (kw n "-" i))) (range r)))
 
-(def w# nth)
-
 ; state
 ; -----
 
-(def empty-state {:charge-map {} :machines []})
+; inefficient v
 
+(def empty-state {:charge-map {} :machines []})
 (defn add-machine [s m]
   (update s :machines conj m))
+(defn dependent-machines [s w]
+  (filter #(some #{w} (:ins %)) (:machines s)))
+
+; efficient v
+(def empty-state {:charge-map {} :in->machines {}})
+(defn add-machine [s {:keys [ins] :as m}]
+  (reduce
+    (fn [acc-state in]
+      (update-in acc-state
+                 [:in->machines in]
+                 (fn [xs] (conj (or xs []) m))))
+    s
+    ins))
+(defn dependent-machines [s w]
+  (get-in s [:in->machines w]))
 
 ; nand
 ; ----
@@ -56,7 +70,6 @@
   (map (partial charge state) ws))
 
 (defn set-charge
-  ([state w v] (set-charge :repl state w v))
   ([source state w v]
    (assoc-in state [:charge-map w source] v)))
 
@@ -79,9 +92,7 @@
        state'
        (reduce (fn [s out] (trigger-machine s out))
                state'
-               (filter
-                 #(some #{wire} (:ins %))
-                 (:machines state)))))))
+               (dependent-machines state' wire))))))
 
 (defn trigger-many [state ws vs]
   (reduce
@@ -251,13 +262,13 @@
         (wire-and-gate decoder-o-1 decoder-o-2 x)
         (wire-and-gate x io-s s)
         (wire-and-gate x io-e e)
-        (wire-register s e ios register-bits ios))))
+        (wire-bus ios s e register-bits))))
 
-(defn wire-ram [state set-mar mar-is io-s io-e ios]
+(defn wire-ram [state mar-s mar-is io-s io-e ios]
   (let [mar-os (wires :mar-o 8)
         mar-first-4-outs (wires :mar-dec-f 16)
         mar-last-4-outs (wires :mar-dec-l 16)
-        state' (wire-mar state set-mar mar-is mar-os mar-first-4-outs mar-first-4-outs)
+        state' (wire-mar state mar-s mar-is mar-os mar-first-4-outs mar-first-4-outs)
         intersections (c/cartesian-product mar-first-4-outs mar-last-4-outs)
         state'' (reduce
                   (fn [acc-state [fw lw]]
@@ -267,59 +278,60 @@
                   intersections)]
     state''))
 
-(defn set-charges [state is vs]
-  (let [state' (reduce
-                 (fn [acc-state [i v]]
-                   (set-charge acc-state i v))
-                 state
-                 (map vector is vs))]
-    (-> state')))
+
+(defn initialize-ram [mar-s mar-is io-s io-e ios]
+  (-> empty-state
+      (wire-ram mar-s mar-is io-s io-e ios)
+      (trigger-many mar-is [0 0 0 0 0 0 0 0])
+      (trigger-many ios [0 0 0 0 0 0 0 0])
+      (trigger-many [mar-s io-s io-e]
+                    [0 0 0])))
+
+(defn set-mar [state mar-s mar-is mar-vs]
+  (-> state
+      (trigger-many mar-is mar-vs)
+      (trigger mar-s 1)
+      (trigger mar-s 0)))
+
+(defn process-repl [state input])
 
 (defn ram-repl []
+  (println
+    (str "🔥 Ram Simulation: Type a command. Here's what you can do: \n"
+         "   (read [1 0 1 0 1 0 1 0]) \n"
+         "   (write [1 0 1 0 1 0 1 0] [1 1 1 1 1 1 1 1]) \n"
+         "   (exit)"))
   (let [mar-is (wires :mar-i 8)
         ios (wires :mar-io 8)
-        out-rs (wires :out-r 8)
-        initial-state (-> empty-state
-                          (wire-ram :mar-s mar-is :io-s :io-e ios)
-                          (wire-register :out-s :out-e ios out-rs ios))]
+        initial-state (initialize-ram :mar-s mar-is :io-s :io-e ios)]
     (loop [state initial-state]
       (let [input (read-string (read-line))
-            cmd (first input)]
+            cmd (first input)
+            args (rest input)]
         (condp = cmd
           'read
-          (let [state' (-> state
-                           (set-charges mar-is (second input))
-                           (set-charge :mar-s 1)
-                           (set-charge :io-e 1)
-                           simulate-circuit
-                           (set-charge :io-e 0)
-                           (set-charge :mar-s 0)
-                           simulate-circuit)]
-
-            (println
-              "selected reg value: \n"
-              (charges state' ios))
-            (recur state'))
+          (let [loc (first args)
+                charge-bus-with-register (-> state
+                                             (set-mar :mar-s mar-is loc)
+                                             (trigger :io-e 1))
+                next (-> charge-bus-with-register
+                         (trigger :io-e 0))]
+            (println (str "> " (str/join (charges charge-bus-with-register
+                                                  ios))))
+            (recur next))
           'write
-          (let [state' (-> state
-                           (set-charge mar-is (second input))
-                           (set-charge ios (nth input 2))
-                           (set-charge :mar-s 1)
-                           (set-charge :io-s 1)
-                           simulate-circuit
-                           (set-charge :mar-s 0)
-                           (set-charge :io-s 0)
-                           (set-charge ios '(0 0 0 0 0 0 0 0))
-                           simulate-circuit)]
-            (println "ok")
-            (recur state'))
+          (let [loc (first args)
+                vs (second args)
+                next (-> state
+                         (set-mar :mar-s mar-is loc)
+                         (trigger-many ios vs)
+                         (trigger :io-s 1)
+                         (trigger :io-s 0)
+                         (trigger-many ios [0 0 0 0 0 0 0 0]))]
+            (println "> done")
+            (recur next))
           'exit
-          nil)))))
-
-; --
-; current stage
-; a. look into bus -- why is r1 being affected?
-; b. clean up and get the repl working
+          (println "> Goodbye!"))))))
 
 (comment
   (ram-repl))
