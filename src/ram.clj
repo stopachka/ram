@@ -23,8 +23,10 @@
        (kw n "#" i)
        n))))
 
-(defn wires [n r]
-  (mapv (fn [i] (wire (kw n "-" i))) (range r)))
+(defn names [n r]
+  (mapv (fn [i] (kw n "-" i)) (range r)))
+
+(def wires (comp (partial mapv wire) names))
 
 ; state
 ; -----
@@ -95,19 +97,13 @@
                (dependent-machines state' wire))))))
 
 (defn trigger-many [state ws vs]
+  (assert (= (count ws) (count vs))
+          (format "Uh oh, ws %s does not match vs %s" ws vs))
   (reduce
     (fn [acc-state [w v]]
       (trigger acc-state w v))
     state
     (map vector ws vs)))
-
-(defn simulate-circuit [{:keys [out->ins] :as state}]
-  (reduce
-    (fn [acc-state out]
-      (trigger-machine acc-state out))
-    state
-    (keys out->ins)))
-
 
 ; not
 ; ---
@@ -265,9 +261,9 @@
         (wire-bus ios s e register-bits))))
 
 (defn wire-ram [state mar-s mar-is io-s io-e ios]
-  (let [mar-os (wires :mar-o 8)
-        mar-first-4-outs (wires :mar-dec-f 16)
-        mar-last-4-outs (wires :mar-dec-l 16)
+  (let [mar-os (names :mar-o 8)
+        mar-first-4-outs (names :mar-dec-f 16)
+        mar-last-4-outs (names :mar-dec-l 16)
         state' (wire-mar state mar-s mar-is mar-os mar-first-4-outs mar-first-4-outs)
         intersections (c/cartesian-product mar-first-4-outs mar-last-4-outs)
         state'' (reduce
@@ -292,8 +288,6 @@
       (trigger-many mar-is mar-vs)
       (trigger mar-s 1)
       (trigger mar-s 0)))
-
-(defn process-repl [state input])
 
 (defn ram-repl []
   (println
