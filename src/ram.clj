@@ -222,11 +222,11 @@
         state'' (reduce
                   (fn [acc-state [sel out]]
                     (let [and-ins (map-indexed
-                                  (fn [i sign]
-                                    (if (= sign 0)
-                                      (nth ins-nots i)
-                                      (nth ins i)))
-                                  sel)]
+                                    (fn [i sign]
+                                      (if (= sign 0)
+                                        (nth ins-nots i)
+                                        (nth ins i)))
+                                    sel)]
                       (wire-and-n acc-state and-ins out)))
                   state'
                   (map vector (wire-mapping (count ins)) outs))]
