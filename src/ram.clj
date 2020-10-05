@@ -31,14 +31,10 @@
 ; state
 ; -----
 
-(def empty-state {:charge-map {} :out->ins {} :in->outs {}})
+(def empty-state {:charge-map {} :machines []})
 
-(defn add-machine [s {:keys [ins out]}]
-  (reduce
-    (fn [acc-state in]
-      (update-in acc-state [:in->outs in] set/union #{out}))
-    (assoc-in s [:out->ins out] ins)
-    ins))
+(defn add-machine [s m]
+  (update s :machines conj m))
 
 ; nand
 ; ----
@@ -66,10 +62,9 @@
 
 (declare trigger)
 
-(defn trigger-out
-  [{:keys [out->ins] :as state} out]
-  (let [ins (out->ins out)
-        new-v (apply nand-xf (charges state ins))]
+(defn trigger-machine
+  [state {:keys [ins out]}]
+  (let [new-v (apply nand-xf (charges state ins))]
     (trigger
       (apply kw (conj ins out))
       state out new-v)))
@@ -82,9 +77,11 @@
          new-c (charge state' wire)]
      (if (= old-c new-c)
        state'
-       (reduce (fn [s out] (trigger-out s out))
+       (reduce (fn [s out] (trigger-machine s out))
                state'
-               ((:in->outs state) wire))))))
+               (filter
+                 #(some #{wire} (:ins %))
+                 (:machines state)))))))
 
 (defn trigger-many [state ws vs]
   (reduce
@@ -96,7 +93,7 @@
 (defn simulate-circuit [{:keys [out->ins] :as state}]
   (reduce
     (fn [acc-state out]
-      (trigger-out acc-state out))
+      (trigger-machine acc-state out))
     state
     (keys out->ins)))
 
@@ -173,42 +170,6 @@
 (defn wire-bus [state bus-wires s e bits]
   (wire-register state s e bus-wires bits bus-wires))
 
-(comment
-  (do
-    (def bw (wires :bw 8))
-    (def r1-bits (wires :r1 8))
-    (def r2-bits (wires :r2 8))
-    (def r3-bits (wires :r3 8))
-    (def s (wire-bus empty-state
-                    bw
-                    [[:s1 :e1 r1-bits]
-                      [:s2 :e2 r2-bits]
-                      [:s3 :e3 r3-bits]]))
-    (def s2 (-> s
-                (set-charge (w# r1-bits 0) 1)
-                (set-charge (w# r1-bits 1) 1)
-                simulate-circuit))
-    (println
-      "set r1 bits. no other reg should be affected \n"
-      [:bus (charges s2 bw)
-       :r1 (charges s2 r1-bits)
-       :r2 (charges s2 r2-bits)
-       :r3 (charges s2 r3-bits)])
-    (def s3 (-> s2 (set-charge :e1 1) simulate-circuit))
-    (println
-      "enable r1. bus should now have the same charge \n"
-      [:bus (charges s3 bw)
-       :r1 (charges s3 r1-bits)
-       :r2 (charges s3 r2-bits)
-       :r3 (charges s3 r3-bits)])
-    (def s4 (-> s3 (set-charge :s3 1) simulate-circuit))
-    (println
-      "set r3. charge should now move to r3 \n"
-      [:bus (charges s4 bw)
-       :r1 (charges s4 r1-bits)
-       :r2 (charges s4 r2-bits)
-       :r3 (charges s4 r3-bits)])))
-
 ; and-n
 ; -----
 
@@ -222,24 +183,6 @@
           (wire-and-gate state a b w)
           (list* w rem)
           out)))))
-
-(comment
-  (do
-    (def is [:a :b :c :d :e])
-    (def o :f)
-    (def s (wire-and-n empty-state
-                       is
-                       o))
-    (def s2 (simulate-circuit (set-charge s (w# is 0) 1)))
-    (println
-      "out is 0 since some is are 0"
-      [(charges s2 is)
-       (charges s2 [o])])
-    (def s3 (simulate-circuit (reduce #(set-charge %1 %2 1) s2 is)))
-    (println
-      "out is 1 since all is are 1"
-      [(charges s3 is)
-       (charges s3 [o])])))
 
 ; decoder
 ; -------
@@ -278,27 +221,6 @@
                   state'
                   (map vector (wire-mapping (count ins)) outs))]
     state''))
-
-(comment
-  (do
-    (def ins (wires :i 4))
-    (def outs (wires :o 16))
-    (def s (wire-decoder empty-state ins outs))
-    (def sels (wire-mapping (count ins)))
-    (def sel (nth sels 5))
-    (def out (nth outs 5))
-    (def s2 (simulate-circuit (reduce
-                                (fn [acc-state [in v]]
-                                  (set-charge :repl acc-state in v))
-                                s
-                                (map vector ins sel))))
-
-    (println
-      (charges s2 ins)
-      "the correct wire should be 1: "
-      (charges s2 [out]) "\n"
-      "rest should be 0: "
-      (every? zero? (charges s2 (remove #{out} outs))))))
 
 ; ram
 ; ---

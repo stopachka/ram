@@ -155,6 +155,7 @@
              (charges s5 bs)))
       (is (= '(0 0 0 0 0 0 0 0)
              (charges s5 os))))))
+
 (deftest test-wire-bus
   (let [bw (wires :bw 8)
         r1-bits (wires :r1 8)
@@ -165,14 +166,17 @@
                (wire-bus bw :s2 :e2 r2-bits)
                (wire-bus bw :s3 :e3 r3-bits)
                (trigger-many bw [1 1 1 0 0 0 0 0])
-               (trigger-many [:s1 :s2 :s3] [0 0 0])
-               (trigger-many [:e1 :e2 :e2] [0 0 0]))
+               (trigger :s1 0)
+               (trigger :e1 0))
         s2 (-> s1
                (trigger :s1 1)
                (trigger :s1 0)
                (trigger-many bw [0 0 0 0 0 0 0 0]))
         s3 (-> s2
-               (trigger :e1 1))]
+               (trigger :e1 1)
+               (trigger :s3 1)
+               (trigger :s3 0)
+               (trigger :e1 0))]
     (testing "only bus should have charge"
       (is (= '(1 1 1 0 0 0 0 0)
              (charges s1 bw)))
@@ -181,7 +185,8 @@
       (is (= '(0 0 0 0 0 0 0 0)
              (charges s1 r2-bits)))
       (is (= '(0 0 0 0 0 0 0 0)
-             (charges s1 r3-bits))))
+             (charges s1 r3-bits)))
+      )
     (testing "r1 should have the charge"
       (is (= '(0 0 0 0 0 0 0 0)
              (charges s2 bw)))
@@ -191,12 +196,40 @@
              (charges s2 r2-bits)))
       (is (= '(0 0 0 0 0 0 0 0)
              (charges s2 r3-bits))))
-    (testing "r3 should have the charge too"
-      (is (= '(1 1 1 0 0 0 0 0)
+    (testing "move r1 to r3"
+      (is (= '(0 0 0 0 0 0 0 0)
              (charges s3 bw)))
       (is (= '(1 1 1 0 0 0 0 0)
              (charges s3 r1-bits)))
       (is (= '(0 0 0 0 0 0 0 0)
-             (charges s3 r2-bits)))
-      (is (= '(0 0 0 0 0 0 0 0)
+             (charges s2 r2-bits)))
+      (is (= '(1 1 1 0 0 0 0 0)
              (charges s3 r3-bits))))))
+
+(deftest test-and-n
+  (let [ii [:a :b :c :d :e]
+        s1 (-> empty-state
+               (wire-and-n ii :o)
+               (trigger-many ii [1 1 1 1 0]))
+        s2 (trigger-many s1 ii [1 1 1 1 1])]
+    (testing "if only some are charged, o is off"
+      (is (= '(1 1 1 1 0)
+             (charges s1 ii)))
+      (is (= 0 (charge s1 :o))))
+    (testing "if all are on, we are on"
+      (is (= '(1 1 1 1 1)
+             (charges s2 ii)))
+      (is (= 1 (charge s2 :o))))))
+
+(deftest test-decoder
+  (let [ii (wires :i 4)
+        os (wires :o 16)
+        sels (wire-mapping (count ii))
+        sel (nth sels 5)
+        o (nth os 5)
+        s1 (-> empty-state
+               (wire-decoder ii os)
+               (trigger-many ii sel))]
+    (testing "only 1 output is on"
+      (is (= 1 (charge s1 o)))
+      (is (every? zero? (charges s1 (remove #{o} os)))))))
