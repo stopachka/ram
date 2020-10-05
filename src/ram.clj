@@ -2,6 +2,14 @@
   (:require [clojure.math.combinatorics :as c]
             [clojure.string :as str]))
 
+; uniq
+; -----
+
+(def _u (atom {}))
+(defn uniq-n [k]
+  (swap! _u update k (fn [i] (inc (or i 0))))
+  (get @_u k))
+
 ; wires
 ; ------
 
@@ -13,15 +21,10 @@
        (apply str)
        keyword))
 
-(def _names (atom {}))
 (defn wire
-  ([] (wire :w))
   ([n]
-   (swap! _names update n (fn [i] (inc (or i 0))))
-   (let [i (@_names n)]
-     (if (> i 1)
-       (kw n "#" i)
-       n))))
+   (let [i (uniq-n n)]
+     (if (> i 1) (kw n "#" i) n))))
 
 (defn names [n r]
   (mapv (fn [i] (kw n "-" i)) (range r)))
@@ -261,15 +264,15 @@
         (wire-bus ios s e register-bits))))
 
 (defn wire-ram [state mar-s mar-is io-s io-e ios]
-  (let [mar-os (names :mar-o 8)
-        mar-first-4-outs (names :mar-dec-f 16)
-        mar-last-4-outs (names :mar-dec-l 16)
+  (let [mar-os (wires :mar-o 8)
+        mar-first-4-outs (wires :mar-dec-f 16)
+        mar-last-4-outs (wires :mar-dec-l 16)
         state' (wire-mar state mar-s mar-is mar-os mar-first-4-outs mar-last-4-outs)
         intersections (c/cartesian-product mar-first-4-outs mar-last-4-outs)
         state'' (reduce
                   (fn [acc-state [fw lw]]
                     (wire-io acc-state io-s io-e ios fw lw
-                             (names (kw fw lw :rb) 8)))
+                             (wires (kw fw lw :rb) 8)))
                   state'
                   intersections)]
     state''))
