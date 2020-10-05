@@ -239,28 +239,6 @@
       (wire-decoder (take 4 os) first-4-outs)
       (wire-decoder (drop 4 os) last-4-outs)))
 
-(comment
-  (do
-    (def is (wires :i 8))
-    (def os (wires :o 8))
-    (def first-4-outs (wires :fw 16))
-    (def last-4-outs (wires :lw 16))
-    (def s (wire-mar empty-state :s is os first-4-outs last-4-outs))
-    (def s2 (-> s
-                (set-charge (w# is 0) 1)
-                (set-charge (w# is 5) 1)
-                (set-charge :s 1)
-                simulate-circuit
-                (set-charge :s 0)
-                simulate-circuit))
-    (println
-      ["os are set \n"
-       (charges s2 os) "\n"
-       "only 1 wire on in first-4-outs \n"
-       (charges s2 first-4-outs) "\n"
-       "only 1 wire on in last-4-outs \n"
-       (charges s2 last-4-outs)])))
-
 (defn wire-io
   "for each intersection, we will set up a register.
 
@@ -274,31 +252,6 @@
         (wire-and-gate x io-s s)
         (wire-and-gate x io-e e)
         (wire-register s e ios register-bits ios))))
-
-(comment
-  (do
-    (def ios (wires :ios 8))
-    (def rs (wires :r 8))
-    (def s (wire-io empty-state :s :e ios :w1 :w2 rs))
-    (def s2 (-> s
-                (set-charge (w# ios 0) 1)
-                (set-charge (w# ios 1) 1)
-                (set-charge :s 1)
-                simulate-circuit))
-    (println
-      ["io set, but register not affected \n"
-       :ios (charges s2 ios) "\n"
-       :e (charges s2 [:e]) "\n"
-       :rs (charges s2 rs)])
-    (def s3 (-> s2
-                (set-charge :w1 1)
-                (set-charge :w2 1)
-                simulate-circuit))
-    (println
-      ["io set, intersection enabled, register got value \n"
-       :ios (charges s3 ios) "\n"
-       :e (charges s3 [:e]) "\n"
-       :rs (charges s3 rs)])))
 
 (defn wire-ram [state set-mar mar-is io-s io-e ios]
   (let [mar-os (wires :mar-o 8)

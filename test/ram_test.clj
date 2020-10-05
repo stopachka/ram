@@ -233,3 +233,64 @@
     (testing "only 1 output is on"
       (is (= 1 (charge s1 o)))
       (is (every? zero? (charges s1 (remove #{o} os)))))))
+
+(deftest test-mar
+  (let [ii (wires :i 8)
+        os (wires :o 8)
+        first-4-decoders (wires :fd 16)
+        last-4-decoders (wires :ld 16)
+        s1 (-> empty-state
+               (wire-mar :s ii os first-4-decoders last-4-decoders)
+               (trigger-many ii [0 0 0 0 0 0 0 0])
+               (trigger :s 0))
+        sel (nth (wire-mapping 4) 5)
+        s2 (trigger-many s1 ii (concat sel sel))
+        s3 (-> s2
+               (trigger :s 1)
+               (trigger :s 0))
+        test-idx (fn [state idx]
+                   (let [fd (nth first-4-decoders idx)
+                         ld (nth last-4-decoders idx)]
+                     (is (= 1 (charge state fd)))
+                     (is (every? zero? (charges state (remove #{fd} first-4-decoders))))
+                     (is (= 1 (charge state ld)))
+                     (is (every? zero? (charges state (remove #{ld} last-4-decoders))))))]
+    (testing
+      "by default only one wire is on, and it's the correct mapping"
+      (test-idx s1 0))
+    (testing
+      "even if ii changes, sel doesn't change b/c s is 0"
+      (test-idx s2 0))
+    (testing
+      "once s triggers, the sel does change"
+      (test-idx s3 5))))
+
+(deftest test-io
+  (let [ios (wires :io 8)
+        rs (wires :r 8)
+        s1 (-> empty-state
+               (wire-io :s :e ios :w1 :w2 rs)
+               (trigger-many ios [0 0 0 0 0 0 0 0])
+               (trigger-many [:s :e :w1 :w2] [0 0 0 0])
+               (trigger-many ios [1 1 1 0 0 0 0 0]))
+        s2 (trigger s1 :s 1)
+        s3 (trigger-many s2 [:w1 :w2] [1 1])
+        s4 (-> s3
+               (trigger :s 0)
+               (trigger-many ios [0 0 0 0 0 0 0 0]))
+        s5 (trigger s4 :e 1)]
+    (testing "io set, but reg not affected"
+      (is (= '(1 1 1 0 0 0 0 0) (charges s1 ios)))
+      (is (= '(0 0 0 0 0 0 0 0) (charges s1 rs))))
+    (testing "io set enable doesn't change, because intersection is not on"
+      (is (= '(1 1 1 0 0 0 0 0) (charges s2 ios)))
+      (is (= '(0 0 0 0 0 0 0 0) (charges s2 rs))))
+    (testing "once intersection is on, charge transfers"
+      (is (= '(1 1 1 0 0 0 0 0) (charges s3 ios)))
+      (is (= '(1 1 1 0 0 0 0 0) (charges s3 rs))))
+    (testing "once s turns off again, changes to io don't make a difference"
+      (is (= '(0 0 0 0 0 0 0 0) (charges s4 ios)))
+      (is (= '(1 1 1 0 0 0 0 0) (charges s4 rs))))
+    (testing "if we turn on e, the r charge transfers to the io"
+      (is (= '(1 1 1 0 0 0 0 0) (charges s5 ios)))
+      (is (= '(1 1 1 0 0 0 0 0) (charges s5 rs))))))
