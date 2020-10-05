@@ -295,5 +295,4 @@
       (is (= '(1 1 1 0 0 0 0 0) (charges s5 ios)))
       (is (= '(1 1 1 0 0 0 0 0) (charges s5 rs))))))
 
-(deftest test-repl
-  )
+(deftest test-repl)
