@@ -264,12 +264,12 @@
   (let [mar-os (names :mar-o 8)
         mar-first-4-outs (names :mar-dec-f 16)
         mar-last-4-outs (names :mar-dec-l 16)
-        state' (wire-mar state mar-s mar-is mar-os mar-first-4-outs mar-first-4-outs)
+        state' (wire-mar state mar-s mar-is mar-os mar-first-4-outs mar-last-4-outs)
         intersections (c/cartesian-product mar-first-4-outs mar-last-4-outs)
         state'' (reduce
                   (fn [acc-state [fw lw]]
                     (wire-io acc-state io-s io-e ios fw lw
-                             (wires (kw fw lw :rb) 8)))
+                             (names (kw fw lw :rb) 8)))
                   state'
                   intersections)]
     state''))
@@ -326,6 +326,32 @@
             (recur next))
           'exit
           (println "> Goodbye!"))))))
+
+(comment
+  (do
+    (def loc [1 1 1 1 1 1 1 1])
+    (def mar-is (names :mar-i 8))
+    (def mar-os (names :mar-o 8))
+    (def mar-dec-fs (names :mar-dec-f 16))
+    (def mar-dec-ls (names :mar-dec-l 16))
+    (def ios (names :mar-io 8))
+    (def initial-state (initialize-ram :mar-s mar-is :io-s :io-e ios))
+    (def with-mar-set (-> initial-state
+                          (set-mar :mar-s mar-is loc)
+                          ))
+    (println "mar-os"
+             (charges
+               with-mar-set
+               mar-os)
+             "\nios"
+             (charges with-mar-set
+                      ios)
+             "\ndec-f"
+             (charges with-mar-set
+                      mar-dec-fs)
+             "\ndec-l"
+             (charges with-mar-set
+                      mar-dec-ls))))
 
 (comment
   (ram-repl))

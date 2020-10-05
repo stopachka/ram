@@ -294,5 +294,3 @@
     (testing "if we turn on e, the r charge transfers to the io"
       (is (= '(1 1 1 0 0 0 0 0) (charges s5 ios)))
       (is (= '(1 1 1 0 0 0 0 0) (charges s5 rs))))))
-
-(deftest test-repl)
