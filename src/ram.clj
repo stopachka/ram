@@ -328,30 +328,4 @@
           (println "> Goodbye!"))))))
 
 (comment
-  (do
-    (def loc [1 1 1 1 1 1 1 1])
-    (def mar-is (names :mar-i 8))
-    (def mar-os (names :mar-o 8))
-    (def mar-dec-fs (names :mar-dec-f 16))
-    (def mar-dec-ls (names :mar-dec-l 16))
-    (def ios (names :mar-io 8))
-    (def initial-state (initialize-ram :mar-s mar-is :io-s :io-e ios))
-    (def with-mar-set (-> initial-state
-                          (set-mar :mar-s mar-is loc)
-                          ))
-    (println "mar-os"
-             (charges
-               with-mar-set
-               mar-os)
-             "\nios"
-             (charges with-mar-set
-                      ios)
-             "\ndec-f"
-             (charges with-mar-set
-                      mar-dec-fs)
-             "\ndec-l"
-             (charges with-mar-set
-                      mar-dec-ls))))
-
-(comment
   (ram-repl))
