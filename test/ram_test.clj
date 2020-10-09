@@ -223,7 +223,7 @@
 (deftest test-decoder
   (let [ii (wires :i 4)
         os (wires :o 16)
-        sels (wire-mapping (count ii))
+        sels (decoder-mapping (count ii))
         sel (nth sels 5)
         o (nth os 5)
         s1 (-> empty-state
@@ -242,7 +242,7 @@
                (wire-mar :s ii os first-4-decoders last-4-decoders)
                (trigger-many ii [0 0 0 0 0 0 0 0])
                (trigger :s 0))
-        sel (nth (wire-mapping 4) 5)
+        sel (nth (decoder-mapping 4) 5)
         s2 (trigger-many s1 ii (concat sel sel))
         s3 (-> s2
                (trigger :s 1)

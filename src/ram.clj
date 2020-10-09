@@ -1,17 +1,95 @@
 (ns ram
   (:require [clojure.math.combinatorics :as c]
-            [clojure.string :as str]))
+            [clojure.string :as string]))
 
-; uniq
+; ex v0
 ; -----
+
+(def ex-state-v0 {:charge-map {:a 1 :b 1 :c 0}
+                  :nand-gates [{:ins [:a :b]
+                                :out :c}]})
+
+; state v0
+; ---------------
+
+(def empty-state {:charge-map {} :nand-gates []})
+
+(defn charge [state wire]
+  (get-in state [:charge-map wire]))
+
+(defn charges [state wires]
+  (map (partial charge state) wires))
+
+(defn set-charge [state wire charge]
+  (assoc-in state [:charge-map wire] charge))
+
+(defn wire-nand-gate [state a b o]
+  (update state :nand-gates conj {:ins [a b] :out o}))
+
+(comment
+  (charges (-> empty-state
+               (set-charge :a 1)
+               (set-charge :b 0))
+           [:a :b])
+  (wire-nand-gate empty-state :a :b :c))
+
+
+; trigger v0
+; ----------
+
+(defn nand-xf [a b]
+  (if (= a b 1) 0 1))
+
+(comment
+  (nand-xf 0 0)
+  (nand-xf 1 1))
+
+(defn dependent-nand-gates [state wire]
+  (filter (fn [{:keys [ins]}] (some #{wire} ins))
+          (:nand-gates state)))
+
+(comment
+  (dependent-nand-gates (wire-nand-gate empty-state :a :b :c) :a))
+
+(declare trigger-nand-gate)
+(defn trigger
+  ([state wire new-v]
+   (let [old-c (charge state wire)
+         state' (set-charge state wire new-v)
+         new-c (charge state' wire)]
+     (if (= old-c new-c)
+       state'
+       (reduce (fn [s out] (trigger-nand-gate s out))
+               state'
+               (dependent-nand-gates state' wire))))))
+
+(defn trigger-nand-gate
+  [state {:keys [ins out]}]
+  (let [new-charge (apply nand-xf (charges state ins))]
+    (trigger state out new-charge)))
+
+(defn trigger-many [state wires charges]
+  (reduce
+    (fn [acc-state [wire charge]]
+      (trigger acc-state wire charge))
+    state
+    (map vector wires charges)))
+
+
+; not gate
+; --------
+
+(defn wire-not-gate
+  ([state a o]
+   (wire-nand-gate state a a o)))
+
+; wires v0
+; ----------
 
 (def _u (atom {}))
 (defn uniq-n [k]
   (swap! _u update k (fn [i] (inc (or i 0))))
   (get @_u k))
-
-; wires
-; ------
 
 (defn kw [& args]
   (->> args
@@ -26,97 +104,15 @@
    (let [i (uniq-n n)]
      (if (> i 1) (kw n "#" i) n))))
 
-(defn names [n r]
-  (mapv (fn [i] (kw n "-" i)) (range r)))
+(comment
+  [(wire :a)
+   (wire :a)])
 
-(def wires (comp (partial mapv wire) names))
-
-; state
-; -----
-
-; inefficient v
-
-(def empty-state {:charge-map {} :machines []})
-(defn add-machine [s m]
-  (update s :machines conj m))
-(defn dependent-machines [s w]
-  (filter #(some #{w} (:ins %)) (:machines s)))
-
-; efficient v
-(def empty-state {:charge-map {} :in->machines {}})
-(defn add-machine [s {:keys [ins] :as m}]
-  (reduce
-    (fn [acc-state in]
-      (update-in acc-state
-                 [:in->machines in]
-                 (fn [xs] (conj (or xs []) m))))
-    s
-    ins))
-(defn dependent-machines [s w]
-  (get-in s [:in->machines w]))
-
-; nand
-; ----
-
-(defn nand-xf [a b]
-  (if (= a b 1) 0 1))
-
-(defn wire-nand-gate [state a b o]
-  (add-machine state {:ins [a b] :out o}))
-
-; trigger
-; -------
-
-(defn charge [{:keys [charge-map]} w]
-  (when-let [charges (vals (charge-map w))]
-    (apply max charges)))
-
-(defn charges [state ws]
-  (map (partial charge state) ws))
-
-(defn set-charge
-  ([source state w v]
-   (assoc-in state [:charge-map w source] v)))
-
-(declare trigger)
-
-(defn trigger-machine
-  [state {:keys [ins out]}]
-  (let [new-v (apply nand-xf (charges state ins))]
-    (trigger
-      (apply kw (conj ins out))
-      state out new-v)))
-
-(defn trigger
-  ([state wire new-v] (trigger :repl state wire new-v))
-  ([source state wire new-v]
-   (let [old-c (charge state wire)
-         state' (set-charge source state wire new-v)
-         new-c (charge state' wire)]
-     (if (= old-c new-c)
-       state'
-       (reduce (fn [s out] (trigger-machine s out))
-               state'
-               (dependent-machines state' wire))))))
-
-(defn trigger-many [state ws vs]
-  (assert (= (count ws) (count vs))
-          (format "Uh oh, ws %s does not match vs %s" ws vs))
-  (reduce
-    (fn [acc-state [w v]]
-      (trigger acc-state w v))
-    state
-    (map vector ws vs)))
-
-; not
-; ---
-
-(defn wire-not-gate
-  ([state a o]
-   (wire-nand-gate state a a o)))
+; and gate
+; --------
 
 (defn wire-and-gate [state a b o]
-  (let [nand-o (wire (kw a b :and-nand))]
+  (let [nand-o (wire (kw a b :and-nand-o))]
     (-> state
         (wire-nand-gate a b nand-o)
         (wire-not-gate nand-o o))))
@@ -135,6 +131,16 @@
          (wire-nand-gate a c o)
          (wire-nand-gate b o c)))))
 
+; wires v1
+; ----------
+
+(defn names [n r]
+  (mapv (fn [i] (kw n "-" i)) (range r)))
+
+(def wires (comp (partial mapv wire) names))
+
+(comment (wires :i 8))
+
 ; byte
 ; ----
 
@@ -144,6 +150,9 @@
           state
           (map vector ins outs)))
 
+; enabler
+; -------
+
 (defn wire-enabler
   [state e ins outs]
   (reduce
@@ -152,10 +161,56 @@
     state
     (map vector ins outs)))
 
+
+; register
+; --------
+
 (defn wire-register [state s e ins bits outs]
   (-> state
       (wire-byte s ins bits)
       (wire-enabler e bits outs)))
+
+; state v1
+; --------
+
+(defn set-charge
+  ([state source wire charge]
+   (assoc-in state [:charge-map wire source] charge)))
+
+(comment (set-charge empty-state :nand-a :w 1))
+
+(defn charge [{:keys [charge-map]} w]
+  (when-let [charges (vals (charge-map w))]
+    (apply max charges)))
+
+(comment
+  (let [s1 (-> empty-state
+               (set-charge :nand-a :w 1)
+               (set-charge :nand-b :w 0))]
+    (charge s1 :w)))
+
+; trigger v1
+; ----------
+
+(defn trigger-nand-gate
+  [state {:keys [ins out]}]
+  (let [new-charge (apply nand-xf (charges state ins))]
+    (trigger (apply kw (conj ins out)) state out new-charge)))
+
+(defn trigger
+  ([state wire new-v] (trigger :repl state wire new-v))
+  ([source state wire new-v]
+   (let [old-c (charge state wire)
+         state' (set-charge state source wire new-v)
+         new-c (charge state' wire)]
+     (if (= old-c new-c)
+       state'
+       (reduce (fn [s out] (trigger-nand-gate s out))
+               state'
+               (dependent-nand-gates state' wire))))))
+
+; wire-bus
+; --------
 
 (defn wire-bus [state bus-wires s e bits]
   (wire-register state s e bus-wires bits bus-wires))
@@ -177,21 +232,11 @@
 ; decoder
 ; -------
 
-(def wire-mapping (partial c/selections [0 1]))
+(def decoder-mapping (partial c/selections [0 1]))
+
+(comment (decoder-mapping 2))
 
 (defn wire-decoder
-  "a decoder maps input buts to wires that represent each possible selection:
-  [a b] -> [w1 w2 w3 w4]
-  (0 0) w1
-  (0 1) w2
-  (1 0) w3
-  (1 1) w4
-
-  This is done by associating each in to a not gate.
-
-  we then wire the combo of in and not gates onto an and-n gate
-  each and-n gate will _only_ turn on, if the selection it represents is on
-  "
   [state ins outs]
   (let [ins-nots (mapv #(wire (kw % :-not)) ins)
         state' (reduce
@@ -209,30 +254,23 @@
                                     sel)]
                       (wire-and-n acc-state and-ins out)))
                   state'
-                  (map vector (wire-mapping (count ins)) outs))]
+                  (map vector (decoder-mapping (count ins)) outs))]
     state''))
 
-; ram
+; mar
 ; ---
 
 (defn wire-mar
-  "mar: memory access register
-
-  This sets up a register with a grid of decoders.
-
-  When a byte is set into the mar register, only _1_ intersection
-  will be active in the grid.
-  "
   [state s is os first-4-outs last-4-outs]
   (-> state
       (wire-byte s is os)
       (wire-decoder (take 4 os) first-4-outs)
       (wire-decoder (drop 4 os) last-4-outs)))
 
-(defn wire-io
-  "for each intersection, we will set up a register.
+; io
+; --
 
-  this register can be set and updated by the io bus's io-s and io-e"
+(defn wire-io
   [state io-s io-e ios decoder-o-1 decoder-o-2 register-bits]
   (let [x (wire (kw decoder-o-1 decoder-o-2 :x))
         s (wire (kw decoder-o-1 decoder-o-2 :s))
@@ -242,6 +280,9 @@
         (wire-and-gate x io-s s)
         (wire-and-gate x io-e e)
         (wire-bus ios s e register-bits))))
+
+; ram
+; ---
 
 (defn wire-ram [state mar-s mar-is io-s io-e ios]
   (let [mar-os (wires :mar-o 8)
@@ -257,6 +298,26 @@
                   intersections)]
     state''))
 
+; state v2
+; ----
+
+
+(def empty-state {:charge-map {} :in->nand-gate {}})
+
+(defn wire-nand-gate [s a b o]
+  (reduce
+    (fn [acc-state in]
+      (update-in acc-state
+                 [:in->nand-gate in]
+                 (fn [xs] (conj (or xs []) {:ins [a b] :out o}))))
+    s
+    [a b]))
+
+(defn dependent-nand-gates [s w]
+  (get-in s [:in->nand-gate w]))
+
+; repl
+; ----
 
 (defn initialize-ram [mar-s mar-is io-s io-e ios]
   (-> empty-state
@@ -271,6 +332,26 @@
       (trigger-many mar-is mar-vs)
       (trigger mar-s 1)
       (trigger mar-s 0)))
+
+(defn handle-read [state mar-s mar-is io-e ios loc ]
+  (let [charge-bus-with-register (-> state
+                                     (set-mar mar-s mar-is loc)
+                                     (trigger io-e 1))
+        next (-> charge-bus-with-register
+                 (trigger io-e 0))]
+    (println (str "> " (string/join (charges charge-bus-with-register
+                                          ios))))
+    next))
+
+(defn handle-write [state mar-s mar-is io-s ios loc vs]
+  (let [next (-> state
+                 (set-mar mar-s mar-is loc)
+                 (trigger-many ios vs)
+                 (trigger io-s 1)
+                 (trigger io-s 0)
+                 (trigger-many ios [0 0 0 0 0 0 0 0]))]
+    (println "> done")
+    next))
 
 (defn ram-repl []
   (println
@@ -287,26 +368,12 @@
             args (rest input)]
         (condp = cmd
           'read
-          (let [loc (first args)
-                charge-bus-with-register (-> state
-                                             (set-mar :mar-s mar-is loc)
-                                             (trigger :io-e 1))
-                next (-> charge-bus-with-register
-                         (trigger :io-e 0))]
-            (println (str "> " (str/join (charges charge-bus-with-register
-                                                  ios))))
-            (recur next))
+          (do
+            (recur (handle-read state :mar-s mar-is :io-e ios (first args))))
           'write
-          (let [loc (first args)
-                vs (second args)
-                next (-> state
-                         (set-mar :mar-s mar-is loc)
-                         (trigger-many ios vs)
-                         (trigger :io-s 1)
-                         (trigger :io-s 0)
-                         (trigger-many ios [0 0 0 0 0 0 0 0]))]
-            (println "> done")
-            (recur next))
+          (do
+            (recur (handle-write state :ms mar-is :io-s ios (first args) (second args))))
+
           'exit
           (println "> Goodbye!"))))))
 
