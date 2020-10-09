@@ -185,8 +185,7 @@
       (is (= '(0 0 0 0 0 0 0 0)
              (charges s1 r2-bits)))
       (is (= '(0 0 0 0 0 0 0 0)
-             (charges s1 r3-bits)))
-      )
+             (charges s1 r3-bits))))
     (testing "r1 should have the charge"
       (is (= '(0 0 0 0 0 0 0 0)
              (charges s2 bw)))
