@@ -368,12 +368,9 @@
             args (rest input)]
         (condp = cmd
           'read
-          (do
-            (recur (handle-read state :mar-s mar-is :io-e ios (first args))))
+          (recur (handle-read state :mar-s mar-is :io-e ios (first args)))
           'write
-          (do
-            (recur (handle-write state :ms mar-is :io-s ios (first args) (second args))))
-
+          (recur (handle-write state :ms mar-is :io-s ios (first args) (second args)))
           'exit
           (println "> Goodbye!"))))))
 
